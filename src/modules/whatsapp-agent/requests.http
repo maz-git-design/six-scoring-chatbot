@@ -1,0 +1,18 @@
+### run whasapps agent
+GET http://localhost:3000/whasapps-agent
+
+
+
+### test whatsapp bot
+POST http://localhost:3000/whatsapp-agent/send
+Content-Type: application/json
+
+{
+  //"jid": "GgezuYLfOC0Jb2NreecQ0o@s.whatsapp.net",
+  "jid": "243892007346@s.whatsapp.net",
+  "message": "Great to see you here! How can I help you today?"
+}
+
+### get groups
+GET http://localhost:3000/whatsapps-agent/groups
+Content-Type: application/json
