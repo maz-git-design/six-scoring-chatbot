@@ -7,4 +7,40 @@ Content-Type: application/json
   "surname": "Doe",
   "phone": "123456789"
 }
-  
+
+### Request to pay
+
+GET https://proxy.momoapi.mtn.com/collection/v1_0/requesttopay/252e900b-c882-4ccb-bd84-ac92897d9ec1
+Content-Type: application/json
+
+Ocp-Apim-Subscription-Key: d484a1f0d34f4301916d0f2c9e9106a2
+Authorization: Bearer a8e23fa5b23f4af3876e2a833b123551
+
+### Get user details
+
+POST https://proxy.momoapi.mtn.com/provisioning/v1_0/apiuser/
+Content-Type: application/json
+
+X-Reference-Id: 252e900b-c882-4ccb-bd84-ac92897d9ec1
+Ocp-Apim-Subscription-Key: a8e23fa5b23f4af3876e2a833b123551
+
+### Get user details
+POST https://proxy.momoapi.mtn.com/collection/token
+Cache-Control: no-cache
+Ocp-Apim-Subscription-Key: 45414642f181443e897e1a016568c960
+Authorization: d56a52aa-8bc9-466a-b3ff-283eea1c59f6
+
+### Verify API User
+GET https://proxy.momoapi.mtn.com/v1_0/apiuser/d56a52aa-8bc9-466a-b3ff-283eea1c59f6
+Ocp-Apim-Subscription-Key: d56a52aa-8bc9-466a-b3ff-283eea1c59f6
+
+
+### Get Access Token
+POST https://proxy.momoapi.mtn.com/collection/token/
+Authorization: Basic ZDU2YTUyYWEtOGJjOS00NjZhLWIzZmYtMjgzZWVhMWM1OWY2OjQ3MjI3NTUzZjkyNDRiZjE4ZGYxNDQ1YWYwYTZlZmQx
+Ocp-Apim-Subscription-Key: 45414642f181443e897e1a016568c960
+Content-Type: application/json
+
+{
+  "grant_type": "client_credentials"
+}

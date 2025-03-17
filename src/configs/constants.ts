@@ -13,8 +13,9 @@ const {
   MONGO_DB_CONNECTION = 'mongodb://localhost:27017/scoringDB',
   NODE_ENV = 'local',
   NODE_PORT = 3000,
-  OPENAI_ORG,
-  OPENAI_TOKEN,
+  OTP_SMS_ORIGIN = '+18286243187',
+  TWILIO_ACCOUNT_SID = 'ACec270a0d9721d973fd70271ddda04777',
+  TWILIO_AUTH_TOKEN = '01ddc202d8754ef703c506043bbe88b5',
   PWD,
   RABBIT_MQ_CONNECTION = 'amqp://developer:developer@rabbitmq.altiustechnology.com:30002/host-0',
   REDIS_DB_CONNECTION = 'redis://:87e94b2dc653a402@redis.altiustechnology.com:30001',
@@ -69,15 +70,10 @@ const constants = {
     },
     socket: { name: 'SOCKET_SERVICE', queue: `${NODE_ENV}:ged:socket` },
   },
-  openai: {
-    url: 'https://api.openai.com/v1/chat',
-    token: OPENAI_TOKEN,
-    organisation: OPENAI_ORG,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${OPENAI_TOKEN}`,
-      'OpenAI-Organization': OPENAI_ORG,
-    },
+  twilio: {
+    accountSid: TWILIO_ACCOUNT_SID,
+    authToken: TWILIO_AUTH_TOKEN,
+    origin: OTP_SMS_ORIGIN,
   },
   google: {
     generativeAI: {

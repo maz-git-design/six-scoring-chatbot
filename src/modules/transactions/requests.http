@@ -1,0 +1,32 @@
+### Add transaction
+POST http://localhost:3000/transactions/add-transaction/224664222718
+Content-Type: application/json
+
+{
+  "transactionId": "234555",
+  "referenceId": "string",
+  "externalId?": "string",
+   "amount": 3000,
+   "currency": "GNF",
+   "payerPhone": "224787456783",
+   "payerMessage": "message",
+   "payerNote": "note",
+   "status": "SUCCESSFUL",
+   "failedReason": "raison",
+   "transactionReason": "activationFee"
+}
+
+
+{
+  "transactionId": string;
+  "referenceId": string;
+  "externalId?": string;
+   "amount": number;
+   "currency": string;
+   "payerPhone": string;
+   "payerMessage": string;
+   "payerNote": string;
+   "status": ; 'SUCCESSFUL' or 'PENDING' or 'FAILED',
+   "failedReason": string;
+   "transactionReason":  'activationFee' or 'settlementPayment' or 'failed';
+}

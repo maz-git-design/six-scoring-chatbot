@@ -11,6 +11,7 @@ import {
   IsBase64,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { Role, WaitingAction } from '../entities/user.schema';
 
 export enum Status {
   PENDING = 'pending',
@@ -20,42 +21,60 @@ export enum Status {
 
 export class CreateUserDto {
   @IsString()
-  name: string;
+  @IsOptional()
+  name?: string;
 
   @IsString()
-  surname: string;
+  @IsOptional()
+  surname?: string;
 
-  @IsDate()
-  @Type(() => Date)
-  birthday: Date;
+  @IsString()
+  @IsOptional()
+  birthday?: string;
 
   @IsPhoneNumber()
   @IsNotEmpty()
   phone: string;
 
-  @IsString()
-  idNumber: string;
+  @IsPhoneNumber()
+  @IsOptional()
+  refPhone?: string;
 
   @IsString()
-  address: string;
+  @IsOptional()
+  idNumber?: string;
 
   @IsString()
-  biometricMethod: string;
+  @IsOptional()
+  address?: string;
 
   @IsString()
+  @IsOptional()
+  biometricMethod?: string;
+
+  @IsString()
+  @IsOptional()
   whasappsId: string;
 
-  @IsUrl()
-  idCardPhotoUrl: string;
+  @IsString()
+  @IsOptional()
+  waitingAction?: WaitingAction;
 
   @IsUrl()
-  idCardFacePhotoUrl: string;
+  @IsOptional()
+  idCardPhotoUrl?: string;
+
+  @IsUrl()
+  @IsOptional()
+  idCardFacePhotoUrl?: string;
 
   @IsDefined()
-  fingerprintData: any;
+  @IsOptional()
+  fingerprintData?: any;
 
   @IsDefined()
-  facerecognitionData: any;
+  @IsOptional()
+  facerecognitionData?: any;
 
   @IsEnum(Status)
   @IsNotEmpty()
@@ -63,4 +82,8 @@ export class CreateUserDto {
 
   @IsNumber()
   step: number;
+
+  @IsEnum(Role)
+  @IsNotEmpty()
+  role?: Role;
 }
