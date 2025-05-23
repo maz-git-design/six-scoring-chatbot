@@ -71,6 +71,12 @@ export class Loan {
   @Prop({ type: String, default: LoanStatus.INITIATED })
   status: LoanStatus;
 
+  @Prop({ type: Number })
+  delayOfNextPayment: number;
+
+  @Prop({ type: Date })
+  nextDueDate: Date;
+
   @Prop({ type: Date })
   activationPaymentDate: Date;
 }

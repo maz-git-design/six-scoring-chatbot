@@ -15,18 +15,3 @@ Content-Type: application/json
    "failedReason": "raison",
    "transactionReason": "activationFee"
 }
-
-
-{
-  "transactionId": string;
-  "referenceId": string;
-  "externalId?": string;
-   "amount": number;
-   "currency": string;
-   "payerPhone": string;
-   "payerMessage": string;
-   "payerNote": string;
-   "status": ; 'SUCCESSFUL' or 'PENDING' or 'FAILED',
-   "failedReason": string;
-   "transactionReason":  'activationFee' or 'settlementPayment' or 'failed';
-}

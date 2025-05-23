@@ -76,12 +76,12 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     private readonly paymentService: PaymentService,
   ) {}
 
-  isDifferenceAtLeast10Minutes(date1: string, date2: string) {
+  isDifference(date1: string, date2: string, delay: number) {
     const diffInMs = Math.abs(
       new Date(date1).getTime() - new Date(date2).getTime(),
     ); // Get absolute difference in milliseconds
     const diffInMinutes = diffInMs / (1000 * 60); // Convert to minutes
-    return diffInMinutes >= 10; // Check if at least 10 minutes
+    return diffInMinutes >= delay; // Check if at least 10 minutes
   }
 
   @Cron(CronExpression.EVERY_30_SECONDS)
@@ -91,11 +91,27 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     try {
       const loans = await this.loans.findByStatus(LoanStatus.ONGOING);
 
-      // loans.forEach((loan) => {
-      //   const las
-      // });
+      loans.forEach((loan) => {
+        const nextDate = loan.nextDueDate;
+        const phoneNumber = loan.user['phone'];
+        console.log('Phone', loan.user['phone']);
 
-      console.log('ICI');
+        // if (nextDate) {
+        //   if (
+        //     dateNow.getTime() >= nextDate.getTime() &&
+        //     loan.status === LoanStatus.ONGOING
+        //   ) {
+        //     //this.sendReminder(loan);
+
+        //     sendOTP(
+        //       phoneNumber,
+        //       `This is a reminder to pay your next settlement of ${loan.activationFee} GNF`,
+        //     );
+        //   }
+        // }
+      });
+
+      //console.log('ICI');
     } catch (error) {}
   }
 
@@ -259,7 +275,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
       const m = messages[0];
 
       console.log('User message:', messages);
-      console.log('Message', m.message.extendedTextMessage);
+      //console.log('Message', m.message.extendedTextMessage);
 
       if (!m.message) return; // if there is no text or media message
       const messageType = Object.keys(m.message)[0]; // get what type of message it is -- text, image, video
@@ -969,6 +985,8 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
                           status: LoanStatus.ONGOING,
                           paidAmount: loan.activationFee,
                           activationCode: activationCode,
+                          activationPaymentDate: new Date(),
+                          nextDueDate: new Date(),
                         };
 
                         const loanId = new Types.ObjectId(loan._id as string);
@@ -1061,6 +1079,10 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
                   await this.socket.sendMessage(userWhasappsId!, {
                     text: `We will proceed to the payment of the ${loan.settlementCounter + 1}th settlement...`,
                   });
+
+                  const billAssociated =
+                    await this.paymentService.getRemoteUserBill(phoneNumber);
+
                   const referenceId = uuidv4();
                   const data = await this.paymentService.requestPay(
                     phoneNumber,
@@ -1105,11 +1127,10 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
                         transaction,
                       );
 
-                      // send update to summy app with new transaction details
-                      // const response =
-                      //   await this.paymentService.requestActivationCode(
-                      //     userFound,
-                      //   );
+                      // notify to summy app with new transaction details
+                      await this.paymentService.notifyUserPayment(
+                        billAssociated.billNo,
+                      );
 
                       const updateLoanDto: UpdateLoanDto = {
                         status:
@@ -1276,6 +1297,10 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
                 await this.socket.sendMessage(userWhasappsId!, {
                   text: `We will proceed to the payment of the ${loan.settlementCounter + 1}the settlement...`,
                 });
+
+                const billAssociated =
+                  await this.paymentService.getRemoteUserBill(phoneNumber);
+
                 const referenceId = uuidv4();
                 const data = await this.paymentService.requestPay(
                   phoneNumber,
@@ -1320,11 +1345,10 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
                       transaction,
                     );
 
-                    // send update to summy app with new transaction details
-                    // const response =
-                    //   await this.paymentService.requestActivationCode(
-                    //     userFound,
-                    //   );
+                    // notify to summy app with new transaction details
+                    await this.paymentService.notifyUserPayment(
+                      billAssociated.billNo,
+                    );
 
                     const updateLoanDto: UpdateLoanDto = {
                       status:

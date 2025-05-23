@@ -2,6 +2,7 @@ import { InternalServerErrorException } from '@nestjs/common';
 import constants from 'src/configs/constants';
 
 import * as twilio from 'twilio';
+import { MachineToMachineInstance } from 'twilio/lib/rest/api/v2010/account/availablePhoneNumberCountry/machineToMachine';
 
 const client = twilio(constants.twilio.accountSid, constants.twilio.authToken);
 

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { AuthPaymentService } from './auth-payment.service';
 import { UserDocument } from 'src/modules/users/entities/user.schema';
+import { CreateBillDto } from 'src/modules/bills/dto/create-bill.dto';
 
 @Injectable()
 export class PaymentService {
@@ -107,6 +108,67 @@ export class PaymentService {
     } catch (error) {
       this.logger.error(`Error in requestActivationCode: ${error.message}`);
       throw new Error(`Failed to request activation code: ${error.message}`);
+    }
+  }
+
+  async getRemoteUserBill(phone: string): Promise<CreateBillDto> {
+    const url = `https://afrrikia.com/api/bill/getBillsByCustomer?customerPhone=${phone}`;
+
+    try {
+      const response = await axios.get(url, {});
+
+      console.log(`User bill fetched: ${JSON.stringify(response.data)}`);
+
+      if (response.data.ok) {
+        const bills: CreateBillDto[] = response.data.data.map((bill: any) => {
+          return {
+            billNumber: bill.billNo,
+            billAmount: bill.billAmount,
+            billType: bill.billType,
+            billTypeCode: bill.billTypeCode,
+            customerId: bill.customerId,
+            customerPhone: phone,
+            createTime: bill.createTime,
+            deviceId: bill.deviceId,
+            billStatus: bill.billStatus,
+            notifyTime: bill.notifyTime,
+            overdueTime: bill.overdueTime,
+            payTime: bill.payTime,
+            settledAmount: bill.settledAmount,
+            customerName: bill.customerName,
+            deviceCode: bill.deviceCode,
+          };
+        });
+        return bills[bills.length - 1]; // Return last bill];
+      } else {
+        throw new Error(`Failed to fetch user bill: ${response.data.msg}`);
+      }
+    } catch (error) {
+      this.logger.error(`Error in getUserBill: ${error.message}`);
+      throw new Error(`Failed to fetch user bill: ${error.message}`);
+    }
+  }
+
+  async notifyUserPayment(billNumber: string): Promise<any> {
+    const url = `https://afrrikia.com/api/bill/payBill?billNo=${billNumber}`;
+
+    try {
+      const response = await axios.get(url, {});
+
+      if (response.data.ok) {
+        return true;
+      } else {
+        throw new Error(`Failed to notify bill payment: ${response.data.msg}`);
+      }
+
+      // console.log(
+      //   `Payment notification sent: ${JSON.stringify(response.data)}`,
+      // );
+
+      // return response.data.ok;
+    } catch (error) {
+      this.logger.error(`Error in notifyUserPayment: ${error.message}`);
+      throw new Error(`Failed to notify user about payment: ${error.message}`);
     }
   }
 

@@ -10,7 +10,9 @@ import { randomInt } from 'crypto';
 export class UsersService {
   constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
   async create(createUserDto: CreateUserDto) {
-    const existingUser = await this.findByPhone(createUserDto.phone);
+    const existingUser = await this.userModel.findOne({
+      phone: createUserDto.phone,
+    });
 
     if (existingUser) {
       console.log('######################13', existingUser);

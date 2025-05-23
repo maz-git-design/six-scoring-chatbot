@@ -42,5 +42,8 @@ Ocp-Apim-Subscription-Key: 45414642f181443e897e1a016568c960
 Content-Type: application/json
 
 {
-  "grant_type": "client_credentials"
+  
 }
+
+
+

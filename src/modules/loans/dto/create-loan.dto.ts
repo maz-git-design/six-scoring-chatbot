@@ -7,6 +7,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsDateString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
@@ -77,4 +78,16 @@ export class CreateLoanDto {
   @IsOptional()
   @IsEnum(LoanStatus)
   status?: LoanStatus;
+
+  @IsOptional()
+  @IsDateString()
+  nextDueDate?: Date;
+
+  @IsOptional()
+  @IsNumber()
+  delayOfNextPayment?: number;
+
+  @IsOptional()
+  @IsDateString()
+  activationPaymentDate?: Date;
 }

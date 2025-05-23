@@ -13,6 +13,7 @@ import { LoggerModule, Logger } from 'nestjs-pino';
 import { TransactionsModule } from './modules/transactions/transactions.module';
 import { LoansModule } from './modules/loans/loans.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { BillsModule } from './modules/bills/bills.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     ReportsModule,
     TransactionsModule,
     LoansModule,
+    BillsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,0 +1,8 @@
+### GET Bill Data
+GET  https://afrrikia.com/api/bill/getBillsByCustomer?customerPhone=224664222718
+Content-Type: application/json
+
+
+### Pay Bill
+GET  https://afrrikia.com/api/bill/payBill?billNo=1889350329168871424
+Content-Type: application/json
