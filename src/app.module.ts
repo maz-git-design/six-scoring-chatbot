@@ -14,20 +14,33 @@ import { TransactionsModule } from './modules/transactions/transactions.module';
 import { LoansModule } from './modules/loans/loans.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BillsModule } from './modules/bills/bills.module';
-
+import { SessionModule } from './session/session.module';
+import { MinioModule } from './modules/minio/minio.module';
+import { ConfigModule } from '@nestjs/config';
+import { FilesModule } from './modules/files/files.module';
 @Module({
   imports: [
     WhatsappAgentModule,
+    ConfigModule.forRoot({
+      isGlobal: true, // allows usage in all modules without re-import
+      envFilePath: '.env',
+    }),
     UsersModule,
     DatafilesModule,
     ScoringsModule,
     ScheduleModule.forRoot(),
     LoggerModule.forRoot(),
-    MongooseModule.forRoot(constants.mongoUrl, mongooseModuleOptions),
+    MongooseModule.forRoot(
+      process.env.MONGO_URI || 'mongodb://localhost:27017/myappdb',
+      mongooseModuleOptions,
+    ),
     ReportsModule,
     TransactionsModule,
     LoansModule,
     BillsModule,
+    SessionModule,
+    MinioModule,
+    FilesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

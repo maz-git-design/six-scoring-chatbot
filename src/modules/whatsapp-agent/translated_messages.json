@@ -1,0 +1,58 @@
+[
+  {
+    "english": "Welcome to Affrikia chatbot ${m.pushName}\n\n*`Phone number verification`*\n\nBefore starting, please provide your phone number like (224)(9 digits)\nExample: 224123456789\n\n```SIXBot©copyright 2025```",
+    "french": "Bienvenue sur le chatbot Affrikia ${m.pushName}\n\n*`Vérification du numéro de téléphone`*\n\nAvant de commencer, veuillez fournir votre numéro de téléphone comme (224)(9 chiffres)\nExemple : 224123456789\n\n```SIXBot©copyright 2025```"
+  },
+  {
+    "english": "Phone number received\nWaiting for phone number verification...",
+    "french": "Numéro de téléphone reçu\nEn attente de la vérification du numéro de téléphone..."
+  },
+  {
+    "english": "An OTP code where send to the phone number you provided ${userMessage}\nPlease put it here like this O:OTP Received...\nExample: O:123456",
+    "french": "Un code OTP a été envoyé au numéro de téléphone que vous avez fourni ${userMessage}\nVeuillez le saisir ici comme ceci O:OTP Reçu...\nExemple : O:123456"
+  },
+  {
+    "english": "Error verifying phone number, try again later...",
+    "french": "Erreur lors de la vérification du numéro de téléphone, veuillez réessayer plus tard..."
+  },
+  {
+    "english": "Welcome back ${userFound.name ?? 'Dear User'}\nYour current status is: ${userFound.status} 🟠\nYour role is: ${userFound.role} 🟠\nHow can I help you ?\n\nPlease choose an option to start\n> *1.KYC Registration (continue step ${userFound.step}) -- 🟠*\n> *2.Scoring Verification 🟢*\n> *3.Loan Request*\n> *------------------*\n> *4.Pay a settlement for me*\n> *5.Pay a settlement for other*\n\n```SIXBot©copyright 2025```",
+    "french": "Bon retour ${userFound.name ?? 'Cher utilisateur'}\nVotre statut actuel est : ${userFound.status} 🟠\nVotre rôle est : ${userFound.role} 🟠\nComment puis-je vous aider ?\n\nVeuillez choisir une option pour commencer\n> *1.Inscription KYC (continuer à l'étape ${userFound.step}) -- 🟠*\n> *2.Vérification de scoring 🟢*\n> *3.Demande de prêt*\n> *------------------*\n> *4.Payer un règlement pour moi*\n> *5.Payer un règlement pour autrui*\n\n```SIXBot©copyright 2025```"
+  },
+  {
+    "english": "You don't have an account yet\n\nYour current status is: No account 🔴\nHow can I help you ?\n\nPlease choose an option to start\n> *1.KYC Registration -- 🔴*\n\n```SIXBot©copyright 2025```",
+    "french": "Vous n'avez pas encore de compte\n\nVotre statut actuel est : Aucun compte 🔴\nComment puis-je vous aider ?\n\nVeuillez choisir une option pour commencer\n> *1.Inscription KYC -- 🔴*\n\n```SIXBot©copyright 2025```"
+  },
+  {
+    "english": "OTP doesn't match, please provide a correct otp.\nIf you didn't receive the OTP code, please restart the process to send again",
+    "french": "Le code OTP ne correspond pas, veuillez fournir un code otp correct.\nSi vous n'avez pas reçu le code OTP, veuillez recommencer le processus pour le renvoyer"
+  },
+  {
+    "english": "Sorry, We weren't able to find your account. Please try again",
+    "french": "Désolé, nous n'avons pas pu trouver votre compte. Veuillez réessayer"
+  },
+  {
+    "english": "You need to register first. Please, choose option 1 to start the KYC registration process",
+    "french": "Vous devez d'abord vous inscrire. Veuillez choisir l'option 1 pour commencer le processus d'enregistrement KYC"
+  },
+  {
+    "english": "No scoring data found for this phone number",
+    "french": "Aucune donnée de scoring trouvée pour ce numéro de téléphone"
+  },
+  {
+    "english": "We weren't able to find your scoring. Please, try later...",
+    "french": "Nous n'avons pas pu trouver votre scoring. Veuillez réessayer plus tard..."
+  },
+  {
+    "english": "Congratulations your phone number ${phoneNumber} is eligible for Loans \n\nYour score is \n> *${scoringResult.totalScore.toFixed(2)}*",
+    "french": "Félicitations, votre numéro de téléphone ${phoneNumber} est éligible pour les prêts \n\nVotre score est \n> *${scoringResult.totalScore.toFixed(2)}*"
+  },
+  {
+    "english": "\n> *3.Loan Request -- 🟢*\n*`Available services`*\n\nPlease choose a service:\n> *L:1 -- Loan on Device*\n> *L:2 -- Loan on Money*\nExample:Reply by L:1 or L:2 to choose the right service",
+    "french": "\n> *3.Demande de prêt -- 🟢*\n*`Services disponibles`*\n\nVeuillez choisir un service :\n> *L:1 -- Prêt sur appareil*\n> *L:2 -- Prêt en argent*\nExemple : Répondez par L:1 ou L:2 pour choisir le service approprié"
+  },
+  {
+    "english": "Sorry your phone number ${phoneNumber} is not eligible for Loans \n\nYour score is \n> *${scoringResult.totalScore.toFixed(2)}*\n\nPlease, choose another service: 1,2 or 3. Thank you",
+    "french": "Désolé, votre numéro de téléphone ${phoneNumber} n'est pas éligible pour les prêts \n\nVotre score est \n> *${scoringResult.totalScore.toFixed(2)}*\n\nVeuillez choisir un autre service : 1, 2 ou 3. Merci"
+  }
+]

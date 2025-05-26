@@ -8,10 +8,26 @@ import { PaymentService } from 'src/services/payment/payment.service';
 import { AuthPaymentService } from 'src/services/payment/auth-payment.service';
 import { LoansModule } from '../loans/loans.module';
 import { TransactionsModule } from '../transactions/transactions.module';
+import { SessionModule } from 'src/session/session.module';
+import { SessionService } from 'src/session/session.service';
+import { FilesModule } from '../files/files.module';
+import { FilesService } from '../files/files.service';
 
 @Module({
   controllers: [WhatsappAgentController],
-  imports: [UsersModule, ScoringsModule, LoansModule, TransactionsModule],
-  providers: [WhatsappAgentService, PaymentService, AuthPaymentService],
+  imports: [
+    UsersModule,
+    ScoringsModule,
+    LoansModule,
+    TransactionsModule,
+    SessionModule,
+    FilesModule,
+  ],
+  providers: [
+    WhatsappAgentService,
+    PaymentService,
+    AuthPaymentService,
+    FilesService,
+  ],
 })
 export class WhatsappAgentModule {}

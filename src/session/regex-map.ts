@@ -1,0 +1,29 @@
+// regex-map.ts
+import { AwaitAction } from './session.enum';
+
+export const AwaitActionRegexMap: Record<AwaitAction, RegExp> = {
+  [AwaitAction.AWAIT_PHONE]: /^224\d{9}$/,
+  [AwaitAction.AWAIT_REG_PHONE]: /^224\d{9}$/,
+  [AwaitAction.AWAIT_REF_PHONE]: /^224\d{9}$/,
+  [AwaitAction.AWAIT_NAME]: /^\s*(?=.{1,20}$)[A-Za-z]+(?:\s+[A-Za-z]+)*$/,
+  [AwaitAction.AWAIT_FIRSTNAME]: /^\s*(?=.{1,20}$)[A-Za-z]+(?:\s+[A-Za-z]+)*$/,
+  [AwaitAction.AWAIT_ADDRESS]: /^\s*.+$/,
+  [AwaitAction.AWAIT_ID_NUMBER]: /^\s*\d+$/,
+  [AwaitAction.AWAIT_BIRTHDATE]: /^\d{2}\/\d{2}\/\d{4}$/,
+  [AwaitAction.AWAIT_OTP]: /^\s*\d{6}$/,
+  [AwaitAction.AWAIT_OTP_GUARD]: /^\s*\d{6}$/,
+  [AwaitAction.AWAIT_ROLE]: /^\s*[12]\s*$/,
+  [AwaitAction.AWAIT_LOAN_REQUEST]: /^\s*[12]\s*$/,
+  [AwaitAction.AWAIT_PAYMENT]: /^P:\s*[0-9]$/,
+  [AwaitAction.AWAIT_USER]: /^U:224\d{9}$/,
+  [AwaitAction.AWAIT_MOMO]: /^M:224\d{9}$/,
+  [AwaitAction.AWAIT_MAIN_MENU]: /^(1|2|3)$/,
+  [AwaitAction.AWAIT_IDCARD_IMAGE]: /^I:\s*image\/\w+$/,
+  [AwaitAction.AWAIT_IDCARD_AND_FACE_IMAGE]: /^IF:\s*image\/\w+$/,
+  [AwaitAction.AWAIT_FACE_IMAGE]: /^F:\s*image\/\w+$/,
+  [AwaitAction.AWAIT_PHONE_VERIFICATION]: /^224\d{9}$/,
+  [AwaitAction.AWAIT_LOAN_TYPE]: /^\s*[12]\s*$/,
+  [AwaitAction.AWAIT_LOAN_ACTION]: /^\s*[12]\s*$/,
+  [AwaitAction.AWAIT_KYC_REGISTRATION]: /^(1)$/,
+  [AwaitAction.AWAIT_RESTART]: /^\/start$/,
+};

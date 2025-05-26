@@ -41,6 +41,14 @@ import { CreateTransactionDto } from '../transactions/dto/create-transaction.dto
 import { TransactionStatus } from '../transactions/schemas/transaction.schema';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { UpdateTransactionDto } from '../transactions/dto/update-transaction.dto';
+import { SessionService, UserSessionData } from 'src/session/session.service';
+import { AwaitAction } from 'src/session/session.enum';
+import { SessionData } from 'h3';
+import { AwaitActionRegexMap } from 'src/session/regex-map';
+import { SendOtp } from 'src/decorators/otp/send-otp.decorator';
+import { OtpVerification } from 'src/decorators/otp/otp-verification.decorator';
+import { OtpContext } from 'src/decorators/otp/otp.context';
+import { FilesService } from '../files/files.service';
 
 const logger = require('pino')();
 
@@ -74,6 +82,8 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     private readonly loans: LoansService,
     private readonly transactions: TransactionsService,
     private readonly paymentService: PaymentService,
+    private readonly sessionService: SessionService,
+    private readonly filesService: FilesService,
   ) {}
 
   isDifference(date1: string, date2: string, delay: number) {
@@ -88,36 +98,36 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
   async handleCron() {
     const dateNow = new Date();
 
-    try {
-      const loans = await this.loans.findByStatus(LoanStatus.ONGOING);
+    // try {
+    //   const loans = await this.loans.findByStatus(LoanStatus.ONGOING);
 
-      loans.forEach((loan) => {
-        const nextDate = loan.nextDueDate;
-        const phoneNumber = loan.user['phone'];
-        console.log('Phone', loan.user['phone']);
+    //   loans.forEach((loan) => {
+    //     const nextDate = loan.nextDueDate;
+    //     const phoneNumber = loan.user['phone'];
+    //     console.log('Phone', loan.user['phone']);
 
-        // if (nextDate) {
-        //   if (
-        //     dateNow.getTime() >= nextDate.getTime() &&
-        //     loan.status === LoanStatus.ONGOING
-        //   ) {
-        //     //this.sendReminder(loan);
+    //     // if (nextDate) {
+    //     //   if (
+    //     //     dateNow.getTime() >= nextDate.getTime() &&
+    //     //     loan.status === LoanStatus.ONGOING
+    //     //   ) {
+    //     //     //this.sendReminder(loan);
 
-        //     sendOTP(
-        //       phoneNumber,
-        //       `This is a reminder to pay your next settlement of ${loan.activationFee} GNF`,
-        //     );
-        //   }
-        // }
-      });
+    //     //     sendOTP(
+    //     //       phoneNumber,
+    //     //       `This is a reminder to pay your next settlement of ${loan.activationFee} GNF`,
+    //     //     );
+    //     //   }
+    //     // }
+    //   });
 
-      //console.log('ICI');
-    } catch (error) {}
+    //   //console.log('ICI');
+    // } catch (error) {}
   }
 
   async onModuleInit() {
     this.connectToWhatsApp();
-    this.getTempUsers();
+    //this.getTempUsers();
     // sendOTP('243892007346', 'Your OTP is 123456');
   }
 
@@ -271,1304 +281,224 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
         console.log('opened connection');
       }
     });
+    this.socket.ev.on('creds.update', saveCreds);
     this.socket.ev.on('messages.upsert', async ({ messages }) => {
       const m = messages[0];
-
       console.log('User message:', messages);
-      //console.log('Message', m.message.extendedTextMessage);
 
       if (!m.message) return; // if there is no text or media message
-      const messageType = Object.keys(m.message)[0]; // get what type of message it is -- text, image, video
-      const phoneregex = /^224\d{9}$/;
-      const regphoneregex = /^P:224\d{9}$/;
-      const refphoneregex = /^R:224\d{9}$/;
-      const nameregex = /^N:\s*[A-Za-z]+(?:\s+[A-Za-z]+)*$/;
-      const surnameregex = /^S:\s*[A-Za-z]+(?:\s+[A-Za-z]+)*$/;
-      const addressregex = /^A:\s*.+$/;
-      const idNumberregex = /^I:\s*\d+$/;
-      const birthdateregex = /^B:\d{2}\/\d{2}\/\d{4}$/;
-      const otpregex = /^O:\s*\d{6}$/;
-      const roleregex = /^RO:\s*[0-9]$/;
-      const loanregex = /^L:\s*[0-9]$/;
-      const payregex = /^P:\s*[0-9]$/;
-      const userregex = /^U:224\d{9}$/;
-      const momoregex = /^M:224\d{9}$/;
+      if (m.key.fromMe) return;
 
-      if (m.message.conversation || m.message.extendedTextMessage) {
-        const userMessage = m.message.conversation
-          ? m.message.conversation
-          : m.message.extendedTextMessage.text;
-        const userWhasappsId = m.key.remoteJid;
+      this.handleMessage(m);
+    });
+  }
 
-        console.log('User message2:', userMessage);
-        if (userMessage === '/start') {
-          await this.socket.sendMessage(userWhasappsId!, {
+  async processImageMessage(m: any) {
+    const userWhatsAppId = m.key.remoteJid;
+    const userFound = await this.users.findByWhatsappId(userWhatsAppId);
+
+    if (!userFound) {
+      await this.socket.sendMessage(userWhatsAppId, {
+        text: "Vous n'avez pas de compte avec ce numéro. Veuillez d'abord vous inscrire.",
+      });
+      await this.sessionService.set(userWhatsAppId, {
+        waitingAction: AwaitAction.AWAIT_MAIN_MENU,
+      });
+      return;
+    }
+
+    if (userFound.step === 7 || userFound.step === 8 || userFound.step === 9) {
+      const buffer = await downloadMediaMessage(
+        m,
+        'buffer',
+        {},
+        {
+          logger: logger,
+          // pass this so that baileys can request a reupload of media
+          // that has been deleted
+          reuploadRequest: this.socket.updateMediaMessage,
+        },
+      );
+
+      // Construct a pseudo Express.Multer.File object
+      const mockMulterFile: Express.Multer.File = {
+        fieldname: 'file',
+        originalname: 'media.jpg', // you can customize this if you know the actual name
+        encoding: '7bit',
+        mimetype: 'image/jpeg', // adjust based on content type
+        buffer: buffer,
+        size: buffer.length,
+        destination: '',
+        filename: '',
+        path: '',
+        stream: undefined, // not required for buffer-based handling
+      };
+
+      var filename = '';
+
+      if (userFound.step === 7) {
+        filename = `${userFound.idNumber}-card`;
+        await this.updateField(
+          userWhatsAppId,
+          'idCardPhotoUrl',
+          "Photo de la carte d'identité",
+          filename,
+          userFound.step + 1,
+        );
+        await this.setNextStep(userWhatsAppId, userFound.step + 1);
+      } else if (userFound.step === 8) {
+        filename = `${userFound.idNumber}-facecard`;
+        await this.updateFieldNew(
+          userWhatsAppId,
+          'idCardFacePhotoUrl',
+          "Carte d'identité avec photo",
+          filename,
+          userFound.step + 1,
+        );
+      } else if (userFound.step === 9) {
+        filename = `${userFound.idNumber}-facerecongition`;
+        await this.updateFieldNew(
+          userWhatsAppId,
+          'facerecognitionData',
+          'Image de reconnaissance faciale',
+          filename,
+          userFound.step + 1,
+        );
+      }
+
+      //await writeFile(url, buffer);
+      const result = await this.filesService.uploadFileFromWhatsApp(
+        mockMulterFile,
+        filename,
+      );
+      console.log('uploadedFile', result);
+    } else {
+      await this.socket.sendMessage(userWhatsAppId, {
+        text: "Vous n'êtes pas à l'étape appropriée pour envoyer une image. Veuillez suivre les instructions.",
+      });
+      await this.sessionService.set(userWhatsAppId, {
+        waitingAction: AwaitAction.AWAIT_MAIN_MENU,
+      });
+    }
+  }
+
+  async handleMessage(m: any) {
+    const userWhatsAppId = m.key.remoteJid;
+    const messageType = Object.keys(m.message)[0];
+    var messageText = '';
+    var hasMessageText = false;
+    if (messageType !== 'imageMessage') {
+      messageText = m.message.conversation
+        ? m.message.conversation
+        : m.message.extendedTextMessage.text;
+      hasMessageText = m.message.conversation || m.message.extendedTextMessage;
+    }
+    // Retrieve current session data from Redis
+    const session = await this.sessionService.get(userWhatsAppId);
+
+    // Handle /start command
+    if (hasMessageText && messageText === '/start') {
+      try {
+        const userFound = await this.users.findByWhatsappId(userWhatsAppId);
+
+        if (userFound) {
+          if (userFound.step !== 10) {
+            await this.socket.sendMessage(m.key.remoteJid!, {
+              text:
+                `Bon retour ${userFound.name ?? 'cher utilisateur'}` +
+                '\nVotre statut actuel est: ' +
+                `${userFound.status} 🟠` +
+                '\nVotre rôle est: ' +
+                `${userFound.role}` +
+                '\nComment puis-je vous aider ?' +
+                '\n' +
+                '\nVeuillez choisir une option pour commencer' +
+                `\n> *1.Inscription KYC (continuer à l'étape ${userFound.step}) 🟠*` +
+                '\n> *2.Vérification de scoring 🟠*' +
+                '\n> *3.Demande de prêt 🟠*' +
+                '\n> *------------------*' +
+                '\n\n```SIXBot©copyright 2025```',
+            });
+          } else {
+            await this.socket.sendMessage(m.key.remoteJid!, {
+              text:
+                `Bon retour ${userFound.name ?? 'cher utilisateur'}` +
+                '\nVotre statut actuel est: ' +
+                `${userFound.status} 🟠` +
+                '\nVotre rôle est: ' +
+                `${userFound.role}` +
+                '\nComment puis-je vous aider ?' +
+                '\n' +
+                '\nVeuillez choisir une option pour commencer' +
+                `\n> *1.Inscription KYC 🟢*` +
+                '\n> *2.Vérification de scoring 🟢*' +
+                '\n> *3.Demande de prêt 🟢*' +
+                '\n> *------------------*' +
+                '\n\n```SIXBot©copyright 2025```',
+            });
+          }
+          await this.sessionService.set(userWhatsAppId, {
+            phone: userFound.phone,
+            waitingAction: AwaitAction.AWAIT_MAIN_MENU,
+          });
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
             text:
-              `Welcome to Affrikia chatbot ${m.pushName}` +
+              `Bienvenue sur le chatbot Affrikia ${m.pushName}` +
               '\n' +
-              '\n*`Phone number verification`*' +
-              '\n\nBefore starting, please provide your phone number like (224)(9 digits)' +
-              '\nExample: 224123456789' +
+              "\n Vous n'avez pas de compte avec ce numéro." +
+              "\n Nous procédons d'abord à la vérification de ce numéro avant de continuer" +
+              '\n*`Vérification du numéro de téléphone`*' +
+              '\n\nAvant de commencer, veuillez fournir votre numéro de téléphone au format (224XXXXXXXXX)' +
               '\n\n```SIXBot©copyright 2025```',
           });
-
-          return;
+          await this.sessionService.set(userWhatsAppId, {
+            waitingAction: AwaitAction.AWAIT_PHONE_VERIFICATION,
+          });
         }
 
-        if (phoneregex.test(userMessage) || userMessage === '243892007346') {
-          await this.socket.sendMessage(userWhasappsId!, {
+        return;
+      } catch (error) {
+        if (error.message === 'User not found') {
+          await this.socket.sendMessage(userWhatsAppId!, {
             text:
-              'Phone number received' +
-              '\nWaiting for phone number verification...',
+              `Bienvenue sur le chatbot Afrrikia ${m.pushName}` +
+              '\n' +
+              "\nVous n'avez pas de compte avec ce numéro." +
+              "Nous procédons d'abord à la vérification de ce numéro avant de continuer" +
+              '\n\n*`Vérification du numéro de téléphone`*' +
+              '\n\nAvant de commencer, veuillez fournir votre numéro de téléphone au format (224XXXXXXXXX)' +
+              '\n\n```SIXBot©copyright 2025```',
           });
-
-          try {
-            const userFoundOtp = await this.users.generateOTP(userMessage);
-            await sendOTP(userMessage, `Your OTP is ${userFoundOtp.otp}`);
-            await this.socket.sendMessage(userWhasappsId!, {
-              text:
-                `An OTP code where send to the phone number you provided ${userMessage}` +
-                '\nPlease put it here like this O:OTP Received...' +
-                '\nExample: O:123456',
-            });
-          } catch (error) {
-            console.log('###########', error.message);
-            if (error.message === 'User not found') {
-              const pinCode = randomInt(100000, 999999);
-              console.log(pinCode);
-              console.log('Phone number:', userMessage);
-              const tempUser: TempUser = {
-                phone: userMessage,
-                otp: pinCode.toString(),
-                whassappsId: userWhasappsId!,
-              };
-
-              await sendOTP(userMessage, `Your OTP is ${pinCode}`);
-              if (this.isTempUserExist(tempUser)) {
-                this.updateTempUser(tempUser);
-              } else {
-                this.addTempUser(tempUser);
-              }
-
-              await this.socket.sendMessage(userWhasappsId!, {
-                text:
-                  `An OTP code where send to the phone number you provided ${userMessage}` +
-                  '\nPlease put it here like this O:OTP Received...' +
-                  '\nExample: O:123456',
-              });
-            } else {
-              console.log('Error verifying phone number', error.message);
-              await this.socket.sendMessage(userWhasappsId!, {
-                text: 'Error verifying phone number, try again later...',
-              });
-            }
-          }
-        }
-
-        if (otpregex.test(userMessage)) {
-          try {
-            const userFound = await this.users.verifyOtp(
-              userWhasappsId,
-              userMessage.slice(2),
-            );
-
-            if (userFound.step !== 10) {
-              await this.socket.sendMessage(m.key.remoteJid!, {
-                text:
-                  `Welcome back ${userFound.name ?? 'Dear User'}` +
-                  '\nYour current status is: ' +
-                  `${userFound.status} 🟠` +
-                  '\nYour role is: ' +
-                  `${userFound.role} 🟠` +
-                  '\nHow can I help you ?' +
-                  '\n' +
-                  '\nPlease choose an option to start' +
-                  `\n> *1.KYC Registration (continue step ${userFound.step}) -- 🟠*` +
-                  '\n> *2.Scoring Verification 🟢*' +
-                  '\n> *3.Loan Request*' +
-                  '\n> *------------------*' +
-                  '\n> *4.Pay a settlement for me*' +
-                  '\n> *5.Pay a settlement for other*' +
-                  '\n\n```SIXBot©copyright 2025```',
-              });
-            } else {
-              await this.socket.sendMessage(m.key.remoteJid!, {
-                text:
-                  `Welcome back ${userFound.name ?? 'Dear User'}` +
-                  '\nYour current status is: ' +
-                  `${userFound.status} 🟢` +
-                  '\nYour role is: ' +
-                  `${userFound.role} 🟠` +
-                  '\nHow can I help you ?' +
-                  '\n' +
-                  '\nPlease choose an option to start' +
-                  `\n> *1.KYC Registration -- 🟢*` +
-                  '\n> *2.Scoring Verification -- 🟢*' +
-                  '\n> *3.Loan Request -- 🟢*' +
-                  '\n> *------------------*' +
-                  '\n> *4.Pay a settlement for me*' +
-                  '\n> *5.Pay a settlement for other*' +
-                  '\n\n```SIXBot©copyright 2025```',
-              });
-            }
-            const user: UpdateUserDto = {
-              waitingAction: 'choosingMenu',
-            };
-            await this.users.update(userFound.id, user);
-
-            return;
-          } catch (error) {
-            if (error.message === 'User not found') {
-              const tempUser = this.tempUsersJson.find(
-                (tempUser) => tempUser.whassappsId === userWhasappsId,
-              );
-
-              if (tempUser) {
-                const otpMatched = tempUser.otp === userMessage.slice(2);
-
-                if (otpMatched) {
-                  await this.socket.sendMessage(userWhasappsId, {
-                    text:
-                      `You don't have an account yet` +
-                      '\n\nYour current status is: ' +
-                      `No account 🔴` +
-                      '\nHow can I help you ?' +
-                      '\n' +
-                      '\nPlease choose an option to start' +
-                      '\n> *1.KYC Registration -- 🔴*' +
-                      '\n\n```SIXBot©copyright 2025```',
-                  });
-                  this.deleteTempUserById(userWhasappsId);
-                } else {
-                  await this.socket.sendMessage(userWhasappsId, {
-                    text:
-                      `OTP doesn't match, please provide a correct otp.` +
-                      "\nIf you didn't receive the OTP code, please restart the process to send again",
-                  });
-                }
-              } else {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: "Sorry, We weren't able to find your account. Please try again",
-                });
-              }
-            } else if (error.message === 'OTP is not correct') {
-              await this.socket.sendMessage(userWhasappsId, {
-                text:
-                  `OTP doesn't match, please provide a correct otp.` +
-                  "\nIf you didn't receive the OTP code, please restart the process to send again",
-              });
-            } else {
-              console.log('Error verifying phone number', error.message);
-              await this.socket.sendMessage(userWhasappsId!, {
-                text: 'Error verifying phone number, try again later...',
-              });
-            }
-
-            return;
-          }
-        }
-
-        if (userMessage === '1') {
-          const userFound = await this.users.findByWhatsappId(userWhasappsId!);
-
-          if (userFound) {
-            await this.socket.sendMessage(userWhasappsId!!, {
-              text: this.getText(userFound.step + 1, userFound),
-            });
-            return;
-          } else {
-            await this.socket.sendMessage(userWhasappsId!, {
-              text: this.getText(0),
-            });
-
-            return;
-          }
-        }
-
-        if (userMessage === '2') {
-          try {
-            const userFound = await this.users.findByWhatsappId(
-              userWhasappsId!,
-            );
-
-            const phoneNumber = userFound.phone;
-
-            const scoringResult =
-              await this.scorings.findScoringByUserPhone(phoneNumber);
-
-            await this.socket.sendMessage(userWhasappsId!, {
-              text:
-                `The scoring for your phone number ${phoneNumber} is: ` +
-                `\n\n*${scoringResult.totalScore.toFixed(2)}*` +
-                `\n\nDon't hesitate to use another service` +
-                '\nThank you',
-            });
-          } catch (error) {
-            if (error.message === 'User not found') {
-              await this.socket.sendMessage(userWhasappsId!, {
-                text: 'You need to register first. Please, choose option 1 to start the KYC registration process',
-              });
-            } else if (error.message === 'Scoring not found') {
-              await this.socket.sendMessage(userWhasappsId!, {
-                text: 'No scoring data found for this phone number',
-              });
-            } else {
-              console.log('AAAAA', error);
-              await this.socket.sendMessage(userWhasappsId!, {
-                text: "We weren't able to find your scoring. Please, try later...",
-              });
-            }
-          }
-        }
-        if (userMessage === '3') {
-          try {
-            const userFound = await this.users.findByWhatsappId(
-              userWhasappsId!,
-            );
-
-            const phoneNumber = userFound.phone;
-
-            const scoringResult =
-              await this.scorings.findScoringByUserPhone(phoneNumber);
-
-            if (scoringResult.totalScore >= 50) {
-              await this.socket.sendMessage(userWhasappsId!, {
-                text:
-                  `Congratulations your phone number ${phoneNumber} is eligible for Loans ` +
-                  '\n\nYour score is ' +
-                  `\n> *${scoringResult.totalScore.toFixed(2)}*`,
-              });
-              await this.socket.sendMessage(userWhasappsId!, {
-                text:
-                  `\n> *3.Loan Request -- 🟢*` +
-                  '\n*`Available services`*' +
-                  '\n\nPlease choose a service:' +
-                  `\n> *L:1 -- Loan on Device*` +
-                  `\n> *L:2 -- Loan on Money*` +
-                  '\nExample:Reply by L:1 or L:2 to choose the right service',
-              });
-            } else {
-              await this.socket.sendMessage(userWhasappsId!, {
-                text:
-                  `Sorry your phone number ${phoneNumber} is not eligible for Loans ` +
-                  '\n\nYour score is ' +
-                  `\n> *${scoringResult.totalScore.toFixed(2)}*` +
-                  `\n\nPlease, choose another service: 1,2 or 3. Thank you`,
-              });
-            }
-          } catch (error) {
-            if (error.message === 'User not found') {
-              await this.socket.sendMessage(userWhasappsId!, {
-                text: 'You need to register first. Please, choose option 1 to start the KYC registration process',
-              });
-            } else if (error.message === 'Scoring not found') {
-              await this.socket.sendMessage(userWhasappsId!, {
-                text: 'No scoring data found for this phone number',
-              });
-            } else {
-              await this.socket.sendMessage(userWhasappsId!, {
-                text: "We weren't able to find your scoring. Please, try later...",
-              });
-            }
-          }
-        }
-
-        if (userMessage === '4') {
-          try {
-            const userFound = await this.users.findByWhatsappId(
-              userWhasappsId!,
-            );
-
-            const phoneNumber = userFound.phone;
-
-            const userId = new Types.ObjectId(userFound._id as string);
-            const loansFound = await this.loans.findByUser(userId);
-
-            const loan = loansFound[0];
-
-            await this.socket.sendMessage(userWhasappsId!, {
-              text:
-                `\n> *4.Pay a settlement *` +
-                '\n*`Available loan requests`*' +
-                `\n ${loan.name}` +
-                `\n Status: ${loan.status} 🟠` +
-                `\n Activation Fee: ${loan.activationFee} GNF` +
-                `\n Total Amount: ${loan.totalAmount} GNF` +
-                `\n Paid Amount: ${loan.paidAmount} GNF` +
-                `\n Settlement: ${loan.settlement.type} , as ${loan.settlement.numberOfPayments} payments` +
-                `\n Remaining settlements: ${loan.settlement.numberOfPayments - loan.settlementCounter} , as ${loan.settlement.numberOfPayments} payments` +
-                '\n\n Choose a method of payment' +
-                `\n> *P:1 -- Use your phone ${phoneNumber} as a Momo payer*` +
-                `\n> *P:2 -- Use another phone as a Momo payer*` +
-                '\nExample:Reply by P:1  the right action',
-            });
-          } catch (error) {
-            if (error.message === 'User not found') {
-              await this.socket.sendMessage(userWhasappsId!, {
-                text: 'You need to register first. Please, choose option 1 to start the KYC registration process',
-              });
-            } else if (error.message === 'Scoring not found') {
-              await this.socket.sendMessage(userWhasappsId!, {
-                text: 'No scoring data found for this phone number',
-              });
-            } else {
-              await this.socket.sendMessage(userWhasappsId!, {
-                text: "We weren't able to find your initiated loan. Please, try later...",
-              });
-            }
-          }
-        }
-
-        if (userMessage === '5') {
-          const tempUser: TempUser = { whassappsId: userWhasappsId! };
-
-          this.addTempUser(tempUser, false);
-
-          await this.socket.sendMessage(userWhasappsId!, {
-            text:
-              `\n> *4.Pay a settlement for other*` +
-              `\nPlease, provide the phone number of the user like this U:phone ` +
-              '\nExample:U:224783456780',
+          await this.sessionService.set(userWhatsAppId, {
+            waitingAction: AwaitAction.AWAIT_PHONE_VERIFICATION,
+          });
+        } else {
+          console.log(
+            'Erreur lors de la vérification du numéro de téléphone',
+            error.message,
+          );
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Erreur lors de la vérification du numéro de téléphone, veuillez réessayer plus tard...',
           });
         }
-
-        if (userregex.test(userMessage)) {
-          try {
-            const phoneNumber = userMessage.slice(2).trim();
-            const userFound = await this.users.findByPhone(phoneNumber);
-
-            const userId = new Types.ObjectId(userFound._id as string);
-            const loansFound = await this.loans.findByUser(userId);
-
-            const loan = loansFound[0];
-
-            var tUser: TempUser = {
-              phoneForPay: phoneNumber,
-              whassappsId: userWhasappsId,
-            };
-
-            this.updateTempUser(tUser);
-
-            await this.socket.sendMessage(userWhasappsId!, {
-              text:
-                `\n> *5.Pay a settlement for other*` +
-                '\n*`Available loan requests`*' +
-                `\n ${loan.name}` +
-                `\n Status: ${loan.status} 🟠` +
-                `\n Activation Fee: ${loan.activationFee} GNF` +
-                `\n Total Amount: ${loan.totalAmount} GNF` +
-                `\n Paid Amount: ${loan.paidAmount} GNF` +
-                `\n Settlement: ${loan.settlement.type} , as ${loan.settlement.numberOfPayments} payments` +
-                `\n Remaining settlements: ${loan.settlement.numberOfPayments - loan.settlementCounter} , as ${loan.settlement.numberOfPayments} payments` +
-                '\n\n Choose a method of payment' +
-                `\n> *P:1 -- Use your phone ${phoneNumber} as a Momo payer*` +
-                `\n> *P:2 -- Use another phone as a Momo payer*` +
-                '\nExample:Reply by P:1  the right action',
-            });
-          } catch (error) {
-            if (error.message === 'User not found') {
-              await this.socket.sendMessage(userWhasappsId!, {
-                text: 'You need to use a registered user. Please, provide a phone number of an existing user==',
-              });
-            } else if (error.message === 'Scoring not found') {
-              await this.socket.sendMessage(userWhasappsId!, {
-                text: 'No scoring data found for this phone number',
-              });
-            } else {
-              await this.socket.sendMessage(userWhasappsId!, {
-                text: "We weren't able to find your initiated loan. Please, try later...",
-              });
-            }
-          }
-        }
-
-        if (loanregex.test(userMessage)) {
-          if (userMessage.slice(2).trim() === '1') {
-            try {
-              const userFound = await this.users.findByWhatsappId(
-                userWhasappsId!,
-              );
-
-              const phoneNumber = userFound.phone;
-
-              const userId = new Types.ObjectId(userFound._id as string);
-              const loansFound = await this.loans.findByUser(userId);
-
-              if (loansFound.length > 0) {
-                const loan = loansFound[0];
-
-                if (loan.status === LoanStatus.INITIATED) {
-                  await this.socket.sendMessage(userWhasappsId!, {
-                    text:
-                      `\n> *3.Loan Request -- 🔴*` +
-                      '\n You already initiated a loan request: ' +
-                      '\n*`Available loan requests`*' +
-                      `\n ${loan.name}` +
-                      `\n Status: ${loan.status} 🟠` +
-                      `\n Activation Fee: ${loan.activationFee} GNF` +
-                      `\n Total Amount: ${loan.totalAmount} GNF` +
-                      '\n\nPlease choose your settlement' +
-                      `\n> *L:4 -- Monthly: ${((loan.totalAmount - loan.activationFee) / 4).toFixed(2)} GNF*` +
-                      `\n> *L:5 -- BiWeekly: ${((loan.totalAmount - loan.activationFee) / 8).toFixed(2)} GNF*` +
-                      `\n> *L:6 -- Weekly: ${((loan.totalAmount - loan.activationFee) / 16).toFixed(2)} GNF*` +
-                      '\nExample:Reply by L:4, L:5 or L:6 to choose the right settlement',
-                  });
-                } else if (loan.status === LoanStatus.WAITINGPAYMENT) {
-                  await this.socket.sendMessage(userWhasappsId!, {
-                    text:
-                      `\n> *3.Loan Request -- 🟠*` +
-                      '\n You already started a loan request: ' +
-                      '\n*`Available loan requests`*' +
-                      `\n ${loan.name}` +
-                      `\n Status: ${loan.status} 🟠` +
-                      `\n Activation Fee: ${loan.activationFee} GNF` +
-                      `\n Total Amount: ${loan.totalAmount} GNF` +
-                      `\n Settlement: ${loan.settlement.type} , as ${loan.settlement.numberOfPayments} payments` +
-                      '\n\n Choose an action' +
-                      `\n> *L:7 -- Initiate the payment of the activation fee*` +
-                      `\n> *L:8 -- Delete the loan request*` +
-                      '\nExample:Reply by L:7 or L:8 to choose the right action',
-                  });
-                } else {
-                  await this.socket.sendMessage(userWhasappsId!, {
-                    text:
-                      `\n> *3.Loan Request -- 🟠*` +
-                      '\n You already started a loan request: ' +
-                      '\n*`Available loan requests`*' +
-                      `\n ${loansFound[0].name}` +
-                      `\n Status: ${loan.status} 🟢` +
-                      `\n Activation Fee: ${loan.activationFee} GNF` +
-                      `\n Total Amount: ${loan.totalAmount} GNF` +
-                      `\n Settlement: ${loan.settlement.type} , as ${loan.settlement.numberOfPayments} payments` +
-                      `\n Paid Amount: ${loan.paidAmount} GNF` +
-                      '\n\n Choose an action' +
-                      `\n> *L:7 -- Initiate the payment of the activation fee*` +
-                      `\n> *L:8 -- Delete the loan request*` +
-                      '\nExample:Reply by L:7 or L:8 to choose the right action',
-                  });
-                }
-              } else {
-                const createLoanDto: CreateLoanDto = {
-                  totalAmount: 5000,
-                  activationFee: 1000,
-                  name: 'Loan for Device',
-                  description: 'Loan for Device',
-                  loanType: LoanType.DEVICE,
-                  status: LoanStatus.INITIATED,
-                  user: userFound._id as string,
-                };
-
-                const createdLoan = await this.loans.create(createLoanDto);
-
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text:
-                    `\n> *3.Loan Request -- 🔴*` +
-                    '\n You already initiated a loan request: ' +
-                    '\n*`Available loan requests`*' +
-                    `\n ${createdLoan.name}` +
-                    `\n Status: ${createdLoan.status} 🟠` +
-                    `\n Activation Fee: ${createdLoan.activationFee} GNF` +
-                    `\n Total Amount: ${createdLoan.totalAmount} GNF` +
-                    '\n\nPlease choose your settlement' +
-                    `\n> *L:4 -- Monthly: ${((createdLoan.totalAmount - createdLoan.activationFee) / 4).toFixed(2)} GNF*` +
-                    `\n> *L:5 -- BiWeekly: ${((createdLoan.totalAmount - createdLoan.activationFee) / 8).toFixed(2)} GNF*` +
-                    `\n> *L:6 -- Weekly: ${((createdLoan.totalAmount - createdLoan.activationFee) / 16).toFixed(2)} GNF*` +
-                    '\nExample:Reply by L:4, L:5 or L:6 to choose the right settlement',
-                });
-              }
-            } catch (error) {
-              if (error.message === 'User not found') {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: 'You need to register first. Please, choose option 1 to start the KYC registration process',
-                });
-              } else if (error.message === 'Scoring not found') {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: 'No scoring data found for this phone number',
-                });
-              } else {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: "We weren't able to find your scoring. Please, try later...",
-                });
-              }
-            }
-          }
-          if (userMessage.slice(2).trim() === '3') {
-            try {
-              const userFound = await this.users.findByWhatsappId(
-                userWhasappsId!,
-              );
-
-              const phoneNumber = userFound.phone;
-
-              const deviceCost = 1000;
-
-              await this.socket.sendMessage(userWhasappsId!, {
-                text:
-                  `\n> *1.Loan Request -- 🟢*` +
-                  '\n*`Loan on a Device`*' +
-                  `\n\nHere is the cost of the device: ` +
-                  `\n*${deviceCost} GNF*` +
-                  '\n\nPlease choose your settlement' +
-                  `\n> *L:4 -- Monthly: ${(deviceCost / 4).toFixed(2)} GNF*` +
-                  `\n> *L:5 -- BiWeekly: ${(deviceCost / 8).toFixed(2)} GNF*` +
-                  `\n> *L:6 -- Weekly: ${(deviceCost / 16).toFixed(2)} GNF*` +
-                  '\nExample:Reply by L:4, L:5 or L:6 to choose the right settlement',
-              });
-            } catch (error) {
-              if (error.message === 'User not found') {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: 'You need to register first. Please, choose option 1 to start the KYC registration process',
-                });
-              } else {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: "We weren't able to find user details. Please, try later...",
-                });
-              }
-            }
-          }
-          if (
-            userMessage.slice(2).trim() === '4' ||
-            userMessage.slice(2).trim() === '5' ||
-            userMessage.slice(2).trim() === '6'
-          ) {
-            try {
-              const userFound = await this.users.findByWhatsappId(
-                userWhasappsId!,
-              );
-
-              const phoneNumber = userFound.phone;
-
-              const userId = new Types.ObjectId(userFound._id as string);
-              const loansFound = await this.loans.findByUser(userId);
-
-              const choose = +userMessage.slice(2).trim();
-
-              if (loansFound.length > 0) {
-                const loan = loansFound[0];
-
-                let settlement: Settlement;
-
-                if (choose === 4) {
-                  settlement = {
-                    type: SettlementType.MONTHLY,
-                    numberOfPayments: 4,
-                  };
-                } else if (choose === 5) {
-                  settlement = {
-                    type: SettlementType.BIWEEKLY,
-                    numberOfPayments: 8,
-                  };
-                } else if (choose === 6) {
-                  settlement = {
-                    type: SettlementType.WEEKLY,
-                    numberOfPayments: 16,
-                  };
-                }
-                const updateLoanDto: UpdateLoanDto = {
-                  settlement: settlement,
-                  status: LoanStatus.WAITINGPAYMENT,
-                  paidAmount: 0,
-                };
-                const loanId = new Types.ObjectId(loan._id as string);
-                const updatedLoan = await this.loans.update(
-                  loanId,
-                  updateLoanDto,
-                );
-
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text:
-                    `\n> *3.Loan Request -- 🟠*` +
-                    '\n Loan request successfully initiated: ' +
-                    '\n*`Available loan requests`*' +
-                    `\n ${updatedLoan.name}` +
-                    `\n Status: ${loan.status} 🟠` +
-                    `\n Activation Fee: ${updatedLoan.activationFee} GNF` +
-                    `\n Total Amount: ${updatedLoan.totalAmount} GNF` +
-                    `\n Paid Amount: ${updatedLoan.paidAmount} GNF` +
-                    `\n Settlement: ${updateLoanDto.settlement.type} , as ${updatedLoan.settlement.numberOfPayments} payments` +
-                    '\n\n Choose an action' +
-                    `\n> *L:7 -- Initiate the payment of the activation fee*` +
-                    `\n> *L:8 -- Delete the loan request*` +
-                    '\nExample:Reply by L:7 or L:8 to choose the right action',
-                });
-              } else {
-                // const createLoanDto: CreateLoanDto = {
-                //   loanType: LoanType.DEVICE,
-                //   user: userFound._id as string,
-                //   status: LoanStatus.INITIATED,
-                // }
-              }
-            } catch (error) {
-              if (error.message === 'User not found') {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: 'You need to register first. Please, choose option 1 to start the KYC registration process',
-                });
-              } else {
-                console.log('#########LOAN', error.message);
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: "We weren't able to proceed with loan request. Please, try later...",
-                });
-              }
-            }
-          }
-          if (userMessage.slice(2).trim() === '7') {
-            await this.socket.sendMessage(userWhasappsId!, {
-              text: 'Wait the payment of the activation fee is in progress...',
-            });
-            try {
-              const userFound = await this.users.findByWhatsappId(
-                userWhasappsId!,
-              );
-
-              const phoneNumber = userFound.phone;
-
-              const userId = new Types.ObjectId(userFound._id as string);
-              const loansFound = await this.loans.findByUser(userId);
-
-              if (loansFound.length > 0) {
-                const loan = loansFound[0];
-
-                if (loan.status === LoanStatus.WAITINGPAYMENT) {
-                  const referenceId = uuidv4();
-                  const data = await this.paymentService.requestPay(
-                    phoneNumber,
-                    loan.activationFee,
-                    referenceId,
-                  );
-
-                  const pendingTransaction: CreateTransactionDto = {
-                    referenceId: referenceId,
-                    payerPhone: userFound.phone,
-                    owner: userFound._id as string,
-                    status: TransactionStatus.PENDING,
-                    payerWhatsappId: userWhasappsId!,
-                  };
-
-                  //const userId = new Types.ObjectId(userFound._id as string);
-
-                  if (data) {
-                    const createdTransaction =
-                      await this.transactions.create(pendingTransaction);
-                    const createdTransactionId = new Types.ObjectId(
-                      createdTransaction._id as string,
-                    );
-                    const transactionData =
-                      await this.paymentService.checkStatus(referenceId);
-
-                    console.log('############', transactionData);
-
-                    if (transactionData.status === 'SUCCESSFUL') {
-                      const transaction: CreateTransactionDto = {
-                        transactionId: transactionData.financialTransactionId,
-                        referenceId: referenceId,
-                        externalId: transactionData.externalId,
-                        amount: transactionData.amount,
-                        currency: transactionData.currency,
-                        payerPhone: transactionData.payer.partyId,
-                        payerMessage: data.payer_message,
-                        payerNote: transactionData.payerNote,
-                        owner: userFound._id as string,
-                        status: TransactionStatus.SUCCESS,
-                      };
-                      const updatedTransaction = await this.transactions.update(
-                        createdTransactionId,
-                        transaction,
-                      );
-                      const response =
-                        await this.paymentService.requestActivationCode(
-                          userFound,
-                        );
-
-                      if (response.data && response.ok) {
-                        const activationCode = response.data;
-                        const updateLoanDto: UpdateLoanDto = {
-                          status: LoanStatus.ONGOING,
-                          paidAmount: loan.activationFee,
-                          activationCode: activationCode,
-                          activationPaymentDate: new Date(),
-                          nextDueDate: new Date(),
-                        };
-
-                        const loanId = new Types.ObjectId(loan._id as string);
-                        await this.loans.update(loanId, updateLoanDto);
-
-                        await this.socket.sendMessage(userWhasappsId!, {
-                          text:
-                            'Congratulations, your payment for activation fee was successful. ' +
-                            `\n\n> * This is your activation code: ${activationCode}`,
-                        });
-
-                        /// Logique to send it by SMS too
-                      } else {
-                        console.log('############', response.msg);
-                        await this.socket.sendMessage(userWhasappsId!, {
-                          text: 'We cannot find your code . Please, try again or contact the customer support',
-                        });
-                      }
-                    } else {
-                      const failedTransaction: UpdateTransactionDto = {
-                        status: TransactionStatus.FAILED,
-                      };
-                      const updatedTransaction = await this.transactions.update(
-                        createdTransactionId,
-                        failedTransaction,
-                      );
-                      await this.socket.sendMessage(userWhasappsId!, {
-                        text: 'Payment failed. Please, try again or contact the customer support',
-                      });
-                    }
-                    //const createdTransaction = await this.transactions.create()
-                  }
-                } else if (loan.status === LoanStatus.INITIATED) {
-                  await this.socket.sendMessage(userWhasappsId!, {
-                    text:
-                      `\n> *1.Loan Request -- 🟠*` +
-                      `\nYou already started a loan request but you didn't set a settlement ` +
-                      '\nPlease set a settlement before proceeding',
-                  });
-                }
-              } else {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: `You don't have a loan request yet. Please, choose option 3 to start a loan request`,
-                });
-              }
-            } catch (error) {
-              if (error.message === 'User not found') {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: 'You need to register first. Please, choose option 1 to start the KYC registration process',
-                });
-              } else if (error.message === 'Scoring not found') {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: 'No scoring data found for this phone number',
-                });
-              } else {
-                console.log('PAYMMMENT', error.message);
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: "We weren't able to initiate a payment. Please, try later...",
-                });
-              }
-            }
-          }
-        }
-
-        if (payregex.test(userMessage)) {
-          if (userMessage.slice(2).trim() === '1') {
-            await this.socket.sendMessage(userWhasappsId!, {
-              text: 'Wait the payment of the settlement is in progress...',
-            });
-            try {
-              var userFound;
-
-              const tUser = this.getTempUserByIdForPay(userWhasappsId!);
-
-              if (!tUser) {
-                userFound = await this.users.findByWhatsappId(userWhasappsId!);
-              } else {
-                userFound = await this.users.findByPhone(tUser.phoneForPay);
-              }
-
-              const phoneNumber = userFound.phone;
-
-              const userId = new Types.ObjectId(userFound._id as string);
-              const loansFound = await this.loans.findByUser(userFound._id);
-
-              if (loansFound.length > 0) {
-                const loan = loansFound[0];
-
-                if (loan.status === LoanStatus.ONGOING) {
-                  await this.socket.sendMessage(userWhasappsId!, {
-                    text: `We will proceed to the payment of the ${loan.settlementCounter + 1}th settlement...`,
-                  });
-
-                  const billAssociated =
-                    await this.paymentService.getRemoteUserBill(phoneNumber);
-
-                  const referenceId = uuidv4();
-                  const data = await this.paymentService.requestPay(
-                    phoneNumber,
-                    loan.activationFee,
-                    referenceId,
-                  );
-
-                  const pendingTransaction: CreateTransactionDto = {
-                    referenceId: referenceId,
-                    payerPhone: userFound.phone,
-                    owner: userFound._id as string,
-                    status: TransactionStatus.PENDING,
-                    payerWhatsappId: userWhasappsId!,
-                  };
-
-                  if (data) {
-                    const createdTransaction =
-                      await this.transactions.create(pendingTransaction);
-                    const createdTransactionId = new Types.ObjectId(
-                      createdTransaction._id as string,
-                    );
-                    const transactionData =
-                      await this.paymentService.checkStatus(referenceId);
-
-                    console.log('############', transactionData);
-
-                    if (transactionData.status === 'SUCCESSFUL') {
-                      const transaction: CreateTransactionDto = {
-                        transactionId: transactionData.financialTransactionId,
-                        referenceId: referenceId,
-                        externalId: transactionData.externalId,
-                        amount: transactionData.amount,
-                        currency: transactionData.currency,
-                        payerPhone: transactionData.payer.partyId,
-                        payerMessage: data.payer_message,
-                        payerNote: transactionData.payerNote,
-                        owner: userFound._id as string,
-                        status: TransactionStatus.SUCCESS,
-                      };
-                      const updatedTransaction = await this.transactions.update(
-                        createdTransactionId,
-                        transaction,
-                      );
-
-                      // notify to summy app with new transaction details
-                      await this.paymentService.notifyUserPayment(
-                        billAssociated.billNo,
-                      );
-
-                      const updateLoanDto: UpdateLoanDto = {
-                        status:
-                          loan.settlement.numberOfPayments ===
-                          loan.settlementCounter + 1
-                            ? LoanStatus.PAID
-                            : LoanStatus.ONGOING,
-                        paidAmount: loan.paidAmount + transactionData.amount,
-                        settlementCounter: loan.settlementCounter + 1,
-                      };
-
-                      const loanId = new Types.ObjectId(loan._id as string);
-                      await this.loans.update(loanId, updateLoanDto);
-
-                      await this.socket.sendMessage(userWhasappsId!, {
-                        text: `Congratulations, your payment of the ${updateLoanDto.settlementCounter} was successful.`,
-                      });
-                    } else {
-                      const failedTransaction: UpdateTransactionDto = {
-                        status: TransactionStatus.FAILED,
-                      };
-                      const updatedTransaction = await this.transactions.update(
-                        createdTransactionId,
-                        failedTransaction,
-                      );
-                      await this.socket.sendMessage(userWhasappsId!, {
-                        text: 'Payment failed. Please, try again or contact the customer support',
-                      });
-                    }
-                    //const createdTransaction = await this.transactions.create()
-                  }
-                }
-                if (loan.status === LoanStatus.WAITINGPAYMENT) {
-                  await this.socket.sendMessage(userWhasappsId!, {
-                    text: 'You should first pay the activation fee before proceeding to the the payement of the settlement',
-                  });
-                } else if (loan.status === LoanStatus.INITIATED) {
-                  await this.socket.sendMessage(userWhasappsId!, {
-                    text:
-                      `\n> *4.Pay settlement -- 🟠*` +
-                      `\nYou already started a loan request but you didn't set a settlement yet ` +
-                      '\nPlease set a settlement before proceeding to the activation fee payment',
-                  });
-                } else if (loan.status === LoanStatus.PAID) {
-                  await this.socket.sendMessage(userWhasappsId!, {
-                    text: `You already paid all your settlement amounts.`,
-                  });
-                }
-              } else {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: `You don't have a loan request yet. Please, choose option 3 to start a loan request`,
-                });
-              }
-            } catch (error) {
-              if (error.message === 'User not found') {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: 'You need to register first. Please, choose option 1 to start the KYC registration process',
-                });
-              } else if (error.message === 'Scoring not found') {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: 'No scoring data found for this phone number',
-                });
-              } else {
-                console.log('PAYMMMENT', error.message);
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: "We weren't able to initiate a payment. Please, try later...",
-                });
-              }
-            }
-          }
-          if (userMessage.slice(2).trim() === '2') {
-            try {
-              var userFound;
-
-              const tUser = this.getTempUserByIdForPay(userWhasappsId!);
-
-              if (!tUser) {
-                userFound = await this.users.findByWhatsappId(userWhasappsId!);
-              } else {
-                userFound = await this.users.findByPhone(tUser.phoneForPay);
-              }
-
-              const phoneNumber = userFound.phone;
-
-              const userId = new Types.ObjectId(userFound._id as string);
-              const loansFound = await this.loans.findByUser(userFound._id);
-
-              if (loansFound.length > 0) {
-                const loan = loansFound[0];
-
-                if (loan.status === LoanStatus.ONGOING) {
-                  await this.socket.sendMessage(userWhasappsId!, {
-                    text: `We will proceed to the payment of the ${loan.settlementCounter + 1}th settlement...`,
-                  });
-                  await this.socket.sendMessage(userWhasappsId!, {
-                    text:
-                      `Please provide the phone number of the Momo payer like this M:phone number` +
-                      '\nExample: M:224666666666',
-                  });
-                } else if (loan.status === LoanStatus.WAITINGPAYMENT) {
-                  await this.socket.sendMessage(userWhasappsId!, {
-                    text: 'You should first pay the activation fee before proceeding to the the payement of the settlement',
-                  });
-                } else if (loan.status === LoanStatus.INITIATED) {
-                  await this.socket.sendMessage(userWhasappsId!, {
-                    text:
-                      `\n> *4.Pay settlement-- 🟠*` +
-                      `\nYou already started a loan request but you didn't set a settlement yet ` +
-                      '\nPlease set a settlement before proceeding to the activation fee payment',
-                  });
-                } else if (loan.status === LoanStatus.PAID) {
-                  await this.socket.sendMessage(userWhasappsId!, {
-                    text: `You already paid all your settlement amounts.`,
-                  });
-                }
-              } else {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: `You don't have a loan request yet. Please, choose option 3 to start a loan request`,
-                });
-              }
-            } catch (error) {
-              if (error.message === 'User not found') {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: 'You need to register first. Please, choose option 1 to start the KYC registration process',
-                });
-              } else if (error.message === 'Scoring not found') {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: 'No scoring data found for this phone number',
-                });
-              } else {
-                console.log('PAYMMMENT', error.message);
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: "We weren't able to initiate a payment. Please, try later...",
-                });
-              }
-            }
-          }
-        }
-
-        if (momoregex.test(userMessage)) {
-          const phoneNumber = userMessage.slice(2).trim();
-
-          await this.socket.sendMessage(userWhasappsId!, {
-            text: `Wait the payment of the settlement with the phone ${phoneNumber} is in progress...`,
-          });
-          try {
-            var userFound;
-
-            const tUser = this.getTempUserByIdForPay(userWhasappsId!);
-
-            if (!tUser) {
-              userFound = await this.users.findByWhatsappId(userWhasappsId!);
-            } else {
-              userFound = await this.users.findByPhone(tUser.phoneForPay);
-            }
-
-            const userId = new Types.ObjectId(userFound._id as string);
-            const loansFound = await this.loans.findByUser(userFound._id);
-
-            if (loansFound.length > 0) {
-              const loan = loansFound[0];
-
-              if (loan.status === LoanStatus.ONGOING) {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: `We will proceed to the payment of the ${loan.settlementCounter + 1}the settlement...`,
-                });
-
-                const billAssociated =
-                  await this.paymentService.getRemoteUserBill(phoneNumber);
-
-                const referenceId = uuidv4();
-                const data = await this.paymentService.requestPay(
-                  phoneNumber,
-                  loan.activationFee,
-                  referenceId,
-                );
-
-                const pendingTransaction: CreateTransactionDto = {
-                  referenceId: referenceId,
-                  payerPhone: phoneNumber,
-                  owner: userFound._id as string,
-                  status: TransactionStatus.PENDING,
-                  payerWhatsappId: userWhasappsId!,
-                };
-
-                if (data) {
-                  const createdTransaction =
-                    await this.transactions.create(pendingTransaction);
-                  const createdTransactionId = new Types.ObjectId(
-                    createdTransaction._id as string,
-                  );
-                  const transactionData =
-                    await this.paymentService.checkStatus(referenceId);
-
-                  console.log('############', transactionData);
-
-                  if (transactionData.status === 'SUCCESSFUL') {
-                    const transaction: CreateTransactionDto = {
-                      transactionId: transactionData.financialTransactionId,
-                      referenceId: referenceId,
-                      externalId: transactionData.externalId,
-                      amount: transactionData.amount,
-                      currency: transactionData.currency,
-                      payerPhone: transactionData.payer.partyId,
-                      payerMessage: data.payer_message,
-                      payerNote: transactionData.payerNote,
-                      owner: userFound._id as string,
-                      status: TransactionStatus.SUCCESS,
-                    };
-                    const updatedTransaction = await this.transactions.update(
-                      createdTransactionId,
-                      transaction,
-                    );
-
-                    // notify to summy app with new transaction details
-                    await this.paymentService.notifyUserPayment(
-                      billAssociated.billNo,
-                    );
-
-                    const updateLoanDto: UpdateLoanDto = {
-                      status:
-                        loan.settlement.numberOfPayments ===
-                        loan.settlementCounter + 1
-                          ? LoanStatus.PAID
-                          : LoanStatus.ONGOING,
-                      paidAmount: loan.paidAmount + transactionData.amount,
-                      settlementCounter: loan.settlementCounter + 1,
-                    };
-
-                    const loanId = new Types.ObjectId(loan._id as string);
-                    await this.loans.update(loanId, updateLoanDto);
-
-                    await this.socket.sendMessage(userWhasappsId!, {
-                      text: `Congratulations, your payment of the ${updateLoanDto.settlementCounter} was successful.`,
-                    });
-                  } else {
-                    const failedTransaction: UpdateTransactionDto = {
-                      status: TransactionStatus.FAILED,
-                    };
-                    const updatedTransaction = await this.transactions.update(
-                      createdTransactionId,
-                      failedTransaction,
-                    );
-                    await this.socket.sendMessage(userWhasappsId!, {
-                      text: 'Payment failed. Please, try again or contact the customer support',
-                    });
-                  }
-                  //const createdTransaction = await this.transactions.create()
-                }
-              }
-              if (loan.status === LoanStatus.WAITINGPAYMENT) {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: 'You should first pay the activation fee before proceeding to the the payement of the settlement',
-                });
-              } else if (loan.status === LoanStatus.INITIATED) {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text:
-                    `\n> *4.Pay settlement -- 🟠*` +
-                    `\nYou already started a loan request but you didn't set a settlement yet ` +
-                    '\nPlease set a settlement before proceeding to the activation fee payment',
-                });
-              } else if (loan.status === LoanStatus.PAID) {
-                await this.socket.sendMessage(userWhasappsId!, {
-                  text: `You already paid all your settlement amounts.`,
-                });
-              }
-            } else {
-              await this.socket.sendMessage(userWhasappsId!, {
-                text: `You don't have a loan request yet. Please, choose option 3 to start a loan request`,
-              });
-            }
-          } catch (error) {
-            if (error.message === 'User not found') {
-              await this.socket.sendMessage(userWhasappsId!, {
-                text: 'You need to register first. Please, choose option 1 to start the KYC registration process',
-              });
-            } else if (error.message === 'Scoring not found') {
-              await this.socket.sendMessage(userWhasappsId!, {
-                text: 'No scoring data found for this phone number',
-              });
-            } else {
-              console.log('PAYMMMENT', error.message);
-              await this.socket.sendMessage(userWhasappsId!, {
-                text: "We weren't able to initiate a payment. Please, try later...",
-              });
-            }
-          }
-        }
-
-        if (regphoneregex.test(userMessage)) {
-          await this.updateField(
-            userWhasappsId!,
-            'phone',
-            'Phone Number',
-            userMessage,
-            0,
-          );
-        }
-
-        if (refphoneregex.test(userMessage)) {
-          await this.updateField(
-            userWhasappsId!,
-            'refPhone',
-            'Reference Phone Number',
-            userMessage,
-            1,
-          );
-        }
-
-        if (nameregex.test(userMessage)) {
-          await this.updateField(
-            userWhasappsId!,
-            'name',
-            'Name',
-            userMessage,
-            2,
-          );
-        }
-
-        if (surnameregex.test(userMessage)) {
-          await this.updateField(
-            userWhasappsId!,
-            'surname',
-            'Surname',
-            userMessage,
-            3,
-          );
-        }
-
-        if (birthdateregex.test(userMessage)) {
-          await this.updateField(
-            userWhasappsId!,
-            'birthday',
-            'Birthday',
-            userMessage,
-            4,
-          );
-        }
-
-        if (addressregex.test(userMessage)) {
-          await this.updateField(
-            userWhasappsId!,
-            'address',
-            'Address',
-            userMessage,
-            5,
-          );
-        }
-
-        if (roleregex.test(userMessage)) {
-          await this.updateField(
-            userWhasappsId!,
-            'role',
-            'Role',
-            userMessage,
-            6,
-          );
-        }
-
-        if (idNumberregex.test(userMessage)) {
-          await this.updateField(
-            userWhasappsId!,
-            'idNumber',
-            'ID Number',
-            userMessage,
-            7,
-          );
-        }
+        return;
       }
-
-      // if the message is an image
-      if (messageType === 'imageMessage') {
-        const userFound = await this.users.findByWhatsappId(m.key.remoteJid);
-
-        if (!userFound) {
-          return;
-        }
-
-        if (
-          userFound.step === 7 ||
-          userFound.step === 8 ||
-          userFound.step === 9
-        ) {
-          const buffer = await downloadMediaMessage(
-            m,
-            'buffer',
-            {},
-            {
-              logger: logger,
-              // pass this so that baileys can request a reupload of media
-              // that has been deleted
-              reuploadRequest: this.socket.updateMediaMessage,
-            },
-          );
-
-          let url = '';
-
-          if (userFound.step === 7) {
-            url = `./idphoto/${userFound.idNumber}-card.jpeg`;
-            await this.updateField(
-              m.key.remoteJid!,
-              'idCardPhotoUrl',
-              'ID Card Photo',
-              url,
-              userFound.step + 1,
-            );
-          }
-
-          if (userFound.step === 8) {
-            url = `./idphoto/${userFound.idNumber}-facecard.jpeg`;
-            await this.updateField(
-              m.key.remoteJid!,
-              'idCardFacePhotoUrl',
-              'ID Card Face Photo',
-              url,
-              userFound.step + 1,
-            );
-          }
-
-          if (userFound.step === 9) {
-            url = `./idphoto/${userFound.idNumber}-facerecongition.jpeg`;
-            await this.updateField(
-              m.key.remoteJid!,
-              'facerecognitionData',
-              'Face Image',
-              url,
-              userFound.step + 1,
-            );
-          }
-
-          await writeFile(url, buffer);
-        }
-        // download the message
-
-        // save to file
-      }
-    });
-    this.socket.ev.on('creds.update', saveCreds);
+    }
+    //If the user is waiting for a specific action, process accordingly
+    if (session.waitingAction) {
+      await this.processWaitingAction(m, session);
+      return;
+    } else {
+      console.log('sending message');
+      await this.sendMessage(
+        userWhatsAppId,
+        'Bienvenue sur le chatbot Afrrikia!' +
+          `Tapez /start pour commencer une session` +
+          '\n\n```SIXBot©copyright 2025```',
+      );
+      // If no session exists, initialize it
+    }
   }
 
   async sendMessage(jid: string, message: string) {
@@ -1585,99 +515,100 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     switch (step) {
       case 0:
         return (
-          `\n> *1.KYC Registration -- 🔴*` +
-          '\n*`STEP 0`*' +
-          '\n\nPlease provide your phone number like P:(224)(9 digits)' +
-          '\nExample: P:224123456789'
+          `\n> *1. Inscription KYC -- 🔴*` +
+          '\n*`ÉTAPE 0`*' +
+          '\n\nVeuillez fournir votre numéro de téléphone (224XXXXXXXX)'
         );
+
       case 1:
         return (
-          `\n> *1.KYC Registration -- 🟠*` +
-          '\n*`STEP 1`*' +
-          '\n\nPlease provide the phone number of Reference like R:(224)(9 digits)' +
-          '\nExample: R:224123456789'
+          `\n> *1. Inscription KYC -- 🟠*` +
+          '\n*`ÉTAPE 1`*' +
+          '\n\nVeuillez fournir le numéro de téléphone de votre référence (224XXXXXXXX)'
         );
+
       case 2:
         return (
-          `\n> *1.KYC Registration -- 🟠*` +
-          '\n*`STEP 2`*' +
-          '\n\nPlease provide your name like N:Your Name' +
-          '\nExample: N:Mazuba'
+          `\n> *1. Inscription KYC -- 🟠*` +
+          '\n*`ÉTAPE 2`*' +
+          '\n\nVeuillez fournir votre prénom'
         );
+
       case 3:
         return (
-          `\n> *1.KYC Registration -- 🟠*` +
-          '\n*`STEP 3`*' +
-          '\n\nPlease provide your surname like S:Your Surname' +
-          '\nExample: S:Lionnel'
+          `\n> *1. Inscription KYC -- 🟠*` +
+          '\n*`ÉTAPE 3`*' +
+          '\n\nVeuillez fournir votre nom de famille'
         );
+
       case 4:
         return (
-          `\n> *1.KYC Registration -- 🟠*` +
-          '\n*`STEP 4`*' +
-          '\n\nPlease provide your birthdate like B:Your Birthday' +
-          '\nExample: B:22/09/1987'
+          `\n> *1. Inscription KYC -- 🟠*` +
+          '\n*`ÉTAPE 4`*' +
+          '\n\nVeuillez fournir votre date de naissance (jj/mm/aaaa)'
         );
+
       case 5:
         return (
-          `\n> *1.KYC Registration -- 🟠*` +
-          '\n*`STEP 5`*' +
-          '\n\nPlease provide your address like A:Your Address' +
-          '\nExample: A:Kinshasa, C/Limete, Q.Masina'
+          `\n> *1. Inscription KYC -- 🟠*` +
+          '\n*`ÉTAPE 5`*' +
+          '\n\nVeuillez fournir votre adresse'
         );
 
       case 6:
         return (
-          `\n> *1.KYC Registration -- 🟠*` +
-          '\n*`STEP 6`*' +
-          '\n\nPlease choose a role. How would you want to be registered:' +
-          `\n> *RO:1 -- Customer*` +
-          `\n> *RO:2 -- Agent*` +
-          '\nExample:Reply by RO:1, to be register as a Customer'
+          `\n> *1. Inscription KYC -- 🟠*` +
+          '\n*`ÉTAPE 6`*' +
+          '\n\nVeuillez choisir un rôle. Comment souhaitez-vous être enregistré :' +
+          `\n> *1 -- Client*` +
+          `\n> *2 -- Agent*`
         );
+
       case 7:
         return (
-          `\n> *1.KYC Registration -- 🟠*` +
-          '\n*`STEP 7`*' +
-          '\n\nPlease provide your ID Number like I:Your ID Number' +
-          '\nExample: I:348765488999'
+          `\n> *1. Inscription KYC -- 🟠*` +
+          '\n*`ÉTAPE 7`*' +
+          '\n\nVeuillez fournir votre numéro de pièce d’identité'
         );
+
       case 8:
         return (
-          `\n> *1.KYC Registration -- 🟠*` +
-          '\n*`STEP 8`*' +
-          '\n\nPlease provide a picture of your ID Card'
+          `\n> *1. Inscription KYC -- 🟠*` +
+          '\n*`ÉTAPE 8`*' +
+          '\n\nVeuillez envoyer une photo de votre carte d’identité'
         );
+
       case 9:
         return (
-          `\n> *1.KYC Registration -- 🟠*` +
-          '\n*`STEP 9`*' +
-          '\n\nPlease provide a picture of your ID Card with your face'
+          `\n> *1. Inscription KYC -- 🟠*` +
+          '\n*`ÉTAPE 9`*' +
+          '\n\nVeuillez envoyer une photo de votre carte d’identité avec votre visage'
         );
       case 10:
         return (
-          `\n> *1.KYC Registration -- 🟠*` +
-          '\n*`STEP 10`*' +
-          '\n\nPlease provide a picture of your face for the face recognition purpose'
+          `\n> *1. Inscription KYC -- 🟠*` +
+          '\n*`ÉTAPE 10`*' +
+          '\n\nVeuillez envoyer une photo de votre visage pour la reconnaissance faciale'
         );
+
       case 11:
         return (
-          `\n> *1. KYC Registration -- Finished 🟢*` +
-          '\n*`Summary of your registration`*' +
-          `\n\n> Phone Number: ${user?.phone}` +
-          `\n> Name: ${user?.name}` +
-          `\n> Surname: ${user?.surname}` +
-          `\n> Birthday: ${user?.birthday}` +
-          `\n> Address: ${user?.address}` +
-          `\n> Role: ${user?.role}` +
-          `\n> ID Number: ${user?.idNumber}` +
-          `\n> ID Card Photo: ${user?.idCardPhotoUrl}` +
-          `\n> ID Card Face Photo: ${user?.idCardFacePhotoUrl}` +
-          `\n> Face Photo: ${user?.facerecognitionData}` +
-          `\n\nYour KYC Registration is now complete. You can now start using the platform` +
-          '\nType ' +
+          `\n> *1. Inscription KYC -- Terminée 🟢*` +
+          '\n*`Résumé de votre inscription`*' +
+          `\n\n> Numéro de téléphone : ${user?.phone}` +
+          `\n> Prénom : ${user?.name}` +
+          `\n> Nom : ${user?.surname}` +
+          `\n> Date de naissance : ${user?.birthday}` +
+          `\n> Adresse : ${user?.address}` +
+          `\n> Rôle : ${user?.role}` +
+          `\n> Numéro d'identité : ${user?.idNumber}` +
+          `\n> Photo carte d'identité : ${user?.idCardPhotoUrl}` +
+          `\n> Photo carte + visage : ${user?.idCardFacePhotoUrl}` +
+          `\n> Photo de visage : ${user?.facerecognitionData}` +
+          `\n\nVotre inscription KYC est maintenant terminée. Vous pouvez commencer à utiliser la plateforme.` +
+          '\nTapez ' +
           '*`/start`*' +
-          ' to start using our services' +
+          ' pour commencer à utiliser nos services.' +
           '\n\n```SIXBot©copyright 2025```'
         );
 
@@ -1695,18 +626,11 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
   ) {
     await this.socket.sendMessage(jid, {
       text:
-        `Your ${fieldFormatted}: ${value.slice(2).trim()} has been received` +
-        '\nUpdating ... Be ready for the next step !',
+        `Votre ${fieldFormatted} : ${value.slice(2).trim()} a été reçu` +
+        '\nTraitement... Préparez-vous pour l’étape suivante !',
     });
 
     const userToUpdate = await this.users.findByWhatsappId(jid);
-
-    // if (!userToUpdate && step !== 0) {
-    //   await this.socket.sendMessage(jid, {
-    //     text: 'User not found. Try to connect with good Whasapps account',
-    //   });
-    //   return;
-    // }
 
     if (userToUpdate) {
       if (userToUpdate.step === step - 1) {
@@ -1734,12 +658,12 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
           // };
         } else {
           await this.socket.sendMessage(jid, {
-            text: 'We could not add this field. Try again later.',
+            text: "Nous n'avons pas pu ajouter ce champ. Veuillez réessayer plus tard.",
           });
         }
       } else {
         await this.socket.sendMessage(jid, {
-          text: `You didn't provide the awaiting field, please provide the required field: ${userToUpdate.waitingAction}`,
+          text: `Vous n'avez pas fourni le champ attendu. Veuillez fournir le champ requis : ${userToUpdate.waitingAction}`,
         });
       }
     } else if (!userToUpdate && step === 0) {
@@ -1756,18 +680,88 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
         await this.socket.sendMessage(jid, {
           text: this.getText(step + 1),
         });
-        // const user: UpdateUserDto = {
-        //   waitingAction: field,
-        // };
-        // await this.users.update(createdUser.id, user);
       } else {
         await this.socket.sendMessage(jid, {
-          text: 'We could not create user. Try again later.',
+          text: "Nous n'avons pas pu créer l'utilisateur. Veuillez réessayer plus tard.",
         });
       }
     } else if (!userToUpdate && step !== 0) {
       await this.socket.sendMessage(jid, {
-        text: 'User not found. Try to connect with good Whasapps account',
+        text: 'Utilisateur introuvable. Essayez de vous connecter avec le bon compte WhatsApp.',
+      });
+      return;
+    }
+  }
+
+  async updateFieldNew(
+    jid: string,
+    field: WaitingAction,
+    fieldFormatted: string,
+    value: string,
+    step: number,
+  ) {
+    await this.socket.sendMessage(jid, {
+      text:
+        `Votre ${fieldFormatted} : ${value.trim()} a été reçu` +
+        '\nTraitement... Préparez-vous pour l’étape suivante !',
+    });
+
+    const userToUpdate = await this.users.findByWhatsappId(jid);
+
+    if (userToUpdate) {
+      if (userToUpdate.step === step - 1) {
+        let fieldValue = '';
+
+        if (step === 6) {
+          fieldValue = value.trim() === '1' ? Role.CUSTOMER : Role.AGENT;
+        } else {
+          fieldValue = value.trim();
+        }
+        const user: UpdateUserDto = {
+          [field]: fieldValue,
+          step: step,
+          status: step === 10 ? Status.ACTIVATED : Status.PENDING,
+        };
+        const updatedUser = await this.users.update(userToUpdate.id, user);
+
+        if (updatedUser) {
+          await this.socket.sendMessage(jid, {
+            text: this.getText(step + 1, updatedUser),
+          });
+          await this.setNextStep(jid, step + 1);
+        } else {
+          await this.socket.sendMessage(jid, {
+            text: "Nous n'avons pas pu ajouter ce champ. Veuillez réessayer plus tard.",
+          });
+        }
+      } else {
+        await this.socket.sendMessage(jid, {
+          text: `Vous n'avez pas fourni le champ attendu. Veuillez fournir le champ requis : ${userToUpdate.waitingAction}`,
+        });
+      }
+    } else if (!userToUpdate && step === 0) {
+      const userToCreate: CreateUserDto = {
+        phone: value.trim(),
+        step: 0,
+        whasappsId: jid,
+        status: Status.PENDING,
+      };
+
+      const createdUser = await this.users.create(userToCreate);
+
+      if (createdUser) {
+        await this.socket.sendMessage(jid, {
+          text: this.getText(step + 1),
+        });
+        await this.setNextStep(jid, step + 1);
+      } else {
+        await this.socket.sendMessage(jid, {
+          text: "Nous n'avons pas pu créer l'utilisateur. Veuillez réessayer plus tard.",
+        });
+      }
+    } else if (!userToUpdate && step !== 0) {
+      await this.socket.sendMessage(jid, {
+        text: 'Utilisateur introuvable. Essayez de vous connecter avec le bon compte WhatsApp.',
       });
       return;
     }
@@ -1801,6 +795,1125 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     return `This action removes a #${id} whatsappAgent`;
   }
 
+  async setNextStep(userWhasappsId: string, nextStep: number) {
+    switch (nextStep) {
+      case 0:
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_REG_PHONE,
+        });
+        break;
+      case 1:
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_REF_PHONE,
+        });
+        break;
+      case 2:
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_FIRSTNAME,
+        });
+        break;
+      case 3:
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_NAME,
+        });
+        break;
+      case 4:
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_BIRTHDATE,
+        });
+        break;
+      case 5:
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_ADDRESS,
+        });
+        break;
+      case 6:
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_ROLE,
+        });
+        break;
+      case 7:
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_ID_NUMBER,
+        });
+        break;
+      case 8:
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_IDCARD_IMAGE,
+        });
+        break;
+      case 9:
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_IDCARD_AND_FACE_IMAGE,
+        });
+        break;
+      case 10:
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_FACE_IMAGE,
+        });
+        break;
+      case 11:
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_RESTART,
+        });
+        break;
+      default:
+        break;
+    }
+  }
+
+  async handleMainMenuOptions(userMessage: string, userWhasappsId: string) {
+    if (userMessage === '1') {
+      const userFound = await this.users.findByWhatsappId(userWhasappsId!);
+
+      if (userFound) {
+        await this.socket.sendMessage(userWhasappsId!!, {
+          text: this.getText(userFound.step + 1, userFound),
+        });
+        await this.setNextStep(userWhasappsId!, userFound.step + 1);
+        return;
+      } else {
+        await this.socket.sendMessage(userWhasappsId!, {
+          text: this.getText(0),
+        });
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_REG_PHONE,
+        });
+        return;
+      }
+    }
+
+    if (userMessage === '2') {
+      try {
+        const userFound = await this.users.findByWhatsappId(userWhasappsId!);
+
+        if (!userFound) {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 1 pour commencer le processus d’inscription KYC.',
+          });
+
+          return;
+        }
+
+        const phoneNumber = userFound.phone;
+
+        const scoringResult =
+          await this.scorings.findScoringByUserPhone(phoneNumber);
+
+        await this.socket.sendMessage(userWhasappsId!, {
+          text:
+            `Le score pour votre numéro de téléphone ${phoneNumber} est: ` +
+            `\n\n*${scoringResult.totalScore.toFixed(2)}*` +
+            `\n\nN'hesitez pas d'utiliser un autre service (1, 2, 3)` +
+            '\nMerci de votre confiance !',
+        });
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_MAIN_MENU,
+        });
+      } catch (error) {
+        if (error.message === 'User not found') {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 1 pour commencer le processus d’inscription KYC.',
+          });
+        } else if (error.message === 'Scoring not found') {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Aucune donnée de score trouvée pour ce numéro de téléphone.',
+          });
+        } else {
+          console.log('', error);
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Nous n’avons pas pu retrouver votre score. Veuillez réessayer plus tard...',
+          });
+        }
+      }
+    }
+    if (userMessage === '3') {
+      try {
+        const userFound = await this.users.findByWhatsappId(userWhasappsId!);
+
+        if (!userFound) {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 1 pour commencer le processus d’inscription KYC.',
+          });
+
+          return;
+        }
+
+        const phoneNumber = userFound.phone;
+
+        const scoringResult =
+          await this.scorings.findScoringByUserPhone(phoneNumber);
+
+        if (scoringResult.totalScore >= 50) {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text:
+              `Félicitations, votre numéro ${phoneNumber} est éligible à un prêt.` +
+              '\n\nVotre score est de : ' +
+              `\n> *${scoringResult.totalScore.toFixed(2)}*`,
+          });
+          await this.socket.sendMessage(userWhasappsId!, {
+            text:
+              `\n> *3.Demande de prêt -- 🟢*` +
+              '\n*Nos Services de prêt*' +
+              '\n\nVeuillez choisir un service :' +
+              `\n> *1 -- Prêt sur appareil*` +
+              `\n> *2 -- Prêt en argent*`,
+          });
+          await this.sessionService.set(userWhasappsId!, {
+            waitingAction: AwaitAction.AWAIT_LOAN_REQUEST,
+          });
+        } else {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text:
+              `Désolé, votre numéro ${phoneNumber} n’est pas éligible à un prêt.` +
+              '\n\nVotre score est de : ' +
+              `\n> *${scoringResult.totalScore.toFixed(2)}*` +
+              `\n\nVeuillez choisir un autre service : 1, 2 ou 3. Merci.`,
+          });
+          await this.sessionService.set(userWhasappsId!, {
+            waitingAction: AwaitAction.AWAIT_MAIN_MENU,
+          });
+        }
+      } catch (error) {
+        if (error.message === 'User not found') {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 1 pour commencer le processus d’inscription KYC.',
+          });
+        } else if (error.message === 'Scoring not found') {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Aucune donnée de score trouvée pour ce numéro de téléphone.',
+          });
+        } else {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Nous n’avons pas pu retrouver votre score. Veuillez réessayer plus tard...',
+          });
+        }
+      }
+    }
+  }
+
+  async handleLoanRequest(userWhasappsId: string, userMessage: string) {
+    if (userMessage.trim() === '1') {
+      try {
+        const userFound = await this.users.findByWhatsappId(userWhasappsId!);
+        const userId = new Types.ObjectId(userFound._id as string);
+        const loansFound = await this.loans.findByUser(userId);
+
+        if (loansFound.length > 0) {
+          const loan = loansFound[0];
+
+          if (loan.status === LoanStatus.INITIATED) {
+            await this.socket.sendMessage(userWhasappsId!, {
+              text:
+                `\n> *3. Demande de prêt -- 🔴*` +
+                `\n Vous avez déjà initié une demande de prêt :` +
+                `\n*Demandes de prêt disponibles*` +
+                `\n ${loan.name}` +
+                `\n Statut : ${loan.status} 🟠` +
+                `\n Frais d’activation : ${loan.activationFee} GNF` +
+                `\n Montant total : ${loan.totalAmount} GNF` +
+                `\n\nVeuillez choisir votre mode de remboursement` +
+                `\n> *1 -- Mensuel : ${((loan.totalAmount - loan.activationFee) / 4).toFixed(2)} GNF*` +
+                `\n> *2 -- Hebdomadaire : ${((loan.totalAmount - loan.activationFee) / 16).toFixed(2)} GNF*` +
+                `\nRépondez avec 1 ou 2 pour choisir l’option souhaitée`,
+            });
+            await this.sessionService.set(userWhasappsId!, {
+              waitingAction: AwaitAction.AWAIT_LOAN_TYPE,
+            });
+          } else if (loan.status === LoanStatus.WAITINGPAYMENT) {
+            await this.socket.sendMessage(userWhasappsId!, {
+              text:
+                `\n> *3. Demande de prêt -- 🟠*` +
+                `\n Vous avez déjà une demande de prêt en cours :` +
+                `\n*Demandes de prêt disponibles*` +
+                `\n ${loan.name}` +
+                `\n Statut : ${loan.status} 🟠` +
+                `\n Frais d’activation : ${loan.activationFee} GNF` +
+                `\n Montant total : ${loan.totalAmount} GNF` +
+                `\n Remboursement : ${loan.settlement.type}, en ${loan.settlement.numberOfPayments} paiements` +
+                `\n\nChoisissez une action` +
+                `\n> *1 -- Initier le paiement des frais d’activation*` +
+                `\n> *2 -- Supprimer la demande de prêt*` +
+                `\nRépondez avec 1 ou 2 pour effectuer votre choix`,
+            });
+            await this.sessionService.set(userWhasappsId!, {
+              waitingAction: AwaitAction.AWAIT_LOAN_ACTION,
+            });
+          } else {
+            await this.socket.sendMessage(userWhasappsId!, {
+              text:
+                `\n> *3. Demande de prêt -- 🟠*` +
+                `\n Vous avez déjà une demande de prêt :` +
+                `\n*Demandes de prêt disponibles*` +
+                `\n ${loan.name}` +
+                `\n Statut : ${loan.status} 🟢` +
+                `\n Frais d’activation : ${loan.activationFee} GNF` +
+                `\n Montant total : ${loan.totalAmount} GNF` +
+                `\n Remboursement : ${loan.settlement.type}, en ${loan.settlement.numberOfPayments} paiements` +
+                `\n Montant payé : ${loan.paidAmount} GNF` +
+                `\n\nChoisissez une action` +
+                `\n> *1 -- Initier le paiement des frais d’activation*` +
+                `\n> *2 -- Supprimer la demande de prêt*` +
+                `\nRépondez avec 1 ou 2 pour effectuer votre choix`,
+            });
+            await this.sessionService.set(userWhasappsId!, {
+              waitingAction: AwaitAction.AWAIT_LOAN_ACTION,
+            });
+          }
+        } else {
+          const createLoanDto: CreateLoanDto = {
+            totalAmount: 5000,
+            activationFee: 1000,
+            name: 'Prêt pour appareil',
+            description: 'Prêt pour appareil',
+            loanType: LoanType.DEVICE,
+            status: LoanStatus.INITIATED,
+            user: userFound._id as string,
+          };
+
+          const createdLoan = await this.loans.create(createLoanDto);
+
+          await this.socket.sendMessage(userWhasappsId!, {
+            text:
+              `\n> *3. Demande de prêt -- 🔴*` +
+              `\n Vous venez d’initier une demande de prêt :` +
+              `\n*Demandes de prêt disponibles*` +
+              `\n ${createdLoan.name}` +
+              `\n Statut : ${createdLoan.status} 🟠` +
+              `\n Frais d’activation : ${createdLoan.activationFee} GNF` +
+              `\n Montant total : ${createdLoan.totalAmount} GNF` +
+              `\n\nVeuillez choisir votre mode de remboursement` +
+              `\n> *1 -- Mensuel : ${((createdLoan.totalAmount - createdLoan.activationFee) / 4).toFixed(2)} GNF*` +
+              `\n> *2 -- Hebdomadaire : ${((createdLoan.totalAmount - createdLoan.activationFee) / 16).toFixed(2)} GNF*` +
+              `\nRépondez avec 1 ou 2 pour choisir l’option souhaitée`,
+          });
+          await this.sessionService.set(userWhasappsId!, {
+            waitingAction: AwaitAction.AWAIT_LOAN_TYPE,
+          });
+        }
+      } catch (error) {
+        if (error.message === 'User not found') {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 1 pour commencer le processus de KYC',
+          });
+          await this.sessionService.set(userWhasappsId!, {
+            waitingAction: AwaitAction.AWAIT_MAIN_MENU,
+          });
+        } else if (error.message === 'Scoring not found') {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Aucun score trouvé pour ce numéro de téléphone. Veuillez choisir un autre menu',
+          });
+          await this.sessionService.set(userWhasappsId!, {
+            waitingAction: AwaitAction.AWAIT_MAIN_MENU,
+          });
+        } else {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Impossible de récupérer votre score. Veuillez choisir un autre menu',
+          });
+          await this.sessionService.set(userWhasappsId!, {
+            waitingAction: AwaitAction.AWAIT_MAIN_MENU,
+          });
+        }
+      }
+    } else if (userMessage.trim() === '2') {
+      await this.socket.sendMessage(userWhasappsId!, {
+        text: "Ce service n'est pas encore disponible. Merci de choisir un autre service (1)",
+      });
+    }
+  }
+
+  async handleLoanType(userWhasappsId: string, userMessage: string) {
+    if (userMessage.trim() === '1' || userMessage.trim() === '2') {
+      try {
+        const userFound = await this.users.findByWhatsappId(userWhasappsId!);
+
+        const userId = new Types.ObjectId(userFound._id as string);
+        const loansFound = await this.loans.findByUser(userId);
+
+        const choice = +userMessage.trim();
+
+        if (loansFound.length > 0) {
+          const loan = loansFound[0];
+
+          let echeancier: Settlement;
+
+          if (choice === 1) {
+            echeancier = {
+              type: SettlementType.MONTHLY,
+              numberOfPayments: 4,
+            };
+          } else if (choice === 2) {
+            echeancier = {
+              type: SettlementType.WEEKLY,
+              numberOfPayments: 16,
+            };
+          }
+
+          const updateLoanDto: UpdateLoanDto = {
+            settlement: echeancier,
+            status: LoanStatus.WAITINGPAYMENT,
+            paidAmount: 0,
+          };
+
+          const loanId = new Types.ObjectId(loan._id as string);
+          const updatedLoan = await this.loans.update(loanId, updateLoanDto);
+
+          await this.socket.sendMessage(userWhasappsId!, {
+            text:
+              `\n> *3. Demande de prêt -- 🟠*` +
+              '\n Demande de prêt initiée avec succès : ' +
+              '\n*`Demandes de prêt disponibles`*' +
+              `\n ${updatedLoan.name}` +
+              `\n Statut : ${loan.status} 🟠` +
+              `\n Frais d’activation : ${updatedLoan.activationFee} GNF` +
+              `\n Montant total : ${updatedLoan.totalAmount} GNF` +
+              `\n Montant payé : ${updatedLoan.paidAmount} GNF` +
+              `\n Échéancier : ${updateLoanDto.settlement.type}, en ${echeancier.numberOfPayments} paiements` +
+              '\n\n Choisissez une action :' +
+              `\n> *1 -- Initier le paiement des frais d’activation*` +
+              '\nExemple : Répondez par 1 pour choisir l’action souhaitée',
+          });
+          await this.sessionService.set(userWhasappsId!, {
+            waitingAction: AwaitAction.AWAIT_LOAN_ACTION,
+          });
+        } else {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Aucune demande de prêt trouvée. Veuillez initier une demande de prêt d’abord.',
+          });
+          await this.sessionService.set(userWhasappsId!, {
+            waitingAction: AwaitAction.AWAIT_LOAN_REQUEST,
+          });
+        }
+      } catch (error) {
+        if (error.message === 'User not found') {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 1 pour démarrer le processus d’enregistrement KYC.',
+          });
+          await this.sessionService.set(userWhasappsId!, {
+            waitingAction: AwaitAction.AWAIT_MAIN_MENU,
+          });
+        } else {
+          console.log('#########PRÊT', error.message);
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Nous n’avons pas pu traiter votre demande de prêt. Veuillez réessayer plus tard...',
+          });
+          await this.sessionService.set(userWhasappsId!, {
+            waitingAction: AwaitAction.AWAIT_MAIN_MENU,
+          });
+        }
+      }
+    }
+  }
+
+  @OtpVerification()
+  async handleLoanAction(context: OtpContext) {
+    if (context.userMessage.trim() === '1') {
+      await this.socket.sendMessage(context.userWhatsappId!, {
+        text: 'Veuillez patienter, le paiement des frais d’activation est en cours...',
+      });
+      try {
+        const userFound = await this.users.findByWhatsappId(
+          context.userWhatsappId!,
+        );
+
+        const phoneNumber = userFound.phone;
+        const userId = new Types.ObjectId(userFound._id as string);
+        const loansFound = await this.loans.findByUser(userId);
+
+        if (loansFound.length > 0) {
+          const loan = loansFound[0];
+
+          if (loan.status === LoanStatus.WAITINGPAYMENT) {
+            const referenceId = uuidv4();
+            const data = await this.paymentService.requestPay(
+              phoneNumber,
+              loan.activationFee,
+              referenceId,
+            );
+
+            const pendingTransaction: CreateTransactionDto = {
+              referenceId: referenceId,
+              payerPhone: userFound.phone,
+              owner: userFound._id as string,
+              status: TransactionStatus.PENDING,
+              payerWhatsappId: context.userWhatsappId!,
+            };
+
+            if (data) {
+              const createdTransaction =
+                await this.transactions.create(pendingTransaction);
+              const createdTransactionId = new Types.ObjectId(
+                createdTransaction._id as string,
+              );
+              const transactionData =
+                await this.paymentService.checkStatus(referenceId);
+
+              console.log('############', transactionData);
+
+              if (transactionData.status === 'SUCCESSFUL') {
+                const transaction: CreateTransactionDto = {
+                  transactionId: transactionData.financialTransactionId,
+                  referenceId: referenceId,
+                  externalId: transactionData.externalId,
+                  amount: transactionData.amount,
+                  currency: transactionData.currency,
+                  payerPhone: transactionData.payer.partyId,
+                  payerMessage: data.payer_message,
+                  payerNote: transactionData.payerNote,
+                  owner: userFound._id as string,
+                  status: TransactionStatus.SUCCESS,
+                };
+                const updatedTransaction = await this.transactions.update(
+                  createdTransactionId,
+                  transaction,
+                );
+                const response =
+                  await this.paymentService.requestActivationCode(userFound);
+
+                if (response.data && response.ok) {
+                  const activationCode = response.data;
+                  const updateLoanDto: UpdateLoanDto = {
+                    status: LoanStatus.ONGOING,
+                    paidAmount: loan.activationFee,
+                    activationCode: activationCode,
+                    activationPaymentDate: new Date(),
+                    nextDueDate: new Date(),
+                  };
+
+                  const loanId = new Types.ObjectId(loan._id as string);
+                  await this.loans.update(loanId, updateLoanDto);
+
+                  await this.socket.sendMessage(context.userWhatsappId!, {
+                    text:
+                      'Félicitations, votre paiement des frais d’activation a été effectué avec succès. ' +
+                      `\n\n> * Voici votre code d’activation : ${activationCode}`,
+                  });
+
+                  // Logique pour l'envoi par SMS également
+                } else {
+                  console.log('############', response.msg);
+                  await this.socket.sendMessage(context.userWhatsappId!, {
+                    text: "Nous n'avons pas pu retrouver votre code. Veuillez réessayer ou contacter le support client.",
+                  });
+                }
+              } else {
+                const failedTransaction: UpdateTransactionDto = {
+                  status: TransactionStatus.FAILED,
+                };
+                const updatedTransaction = await this.transactions.update(
+                  createdTransactionId,
+                  failedTransaction,
+                );
+                await this.socket.sendMessage(context.userWhatsappId!, {
+                  text: 'Échec du paiement. Veuillez réessayer ou contacter le support client.',
+                });
+              }
+            }
+          } else if (loan.status === LoanStatus.INITIATED) {
+            await this.socket.sendMessage(context.userWhatsappId!, {
+              text:
+                `\n> *1. Demande de prêt -- 🟠*` +
+                `\nVous avez déjà initié une demande de prêt mais vous n'avez pas encore défini un plan de remboursement.` +
+                '\nVeuillez définir un plan de remboursement avant de continuer.',
+            });
+          }
+        } else {
+          await this.socket.sendMessage(context.userWhatsappId!, {
+            text: `Vous n'avez pas encore effectué de demande de prêt. Veuillez choisir l’option 3 pour commencer une demande.`,
+          });
+          await this.sessionService.set(context.userWhatsappId!, {
+            waitingAction: AwaitAction.AWAIT_LOAN_REQUEST,
+          });
+        }
+      } catch (error) {
+        if (error.message === 'User not found') {
+          await this.socket.sendMessage(context.userWhatsappId!, {
+            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 1 pour commencer le processus KYC.',
+          });
+          await this.sessionService.set(context.userWhatsappId!, {
+            waitingAction: AwaitAction.AWAIT_MAIN_MENU,
+          });
+        } else if (error.message === 'Scoring not found') {
+          await this.socket.sendMessage(context.userWhatsappId!, {
+            text: 'Aucune donnée de scoring trouvée pour ce numéro de téléphone.',
+          });
+        } else {
+          console.log('PAYMMMENT', error.message);
+          await this.socket.sendMessage(context.userWhatsappId!, {
+            text: "Nous n'avons pas pu initier le paiement. Veuillez réessayer plus tard...",
+          });
+        }
+      }
+    }
+  }
+
+  @SendOtp()
+  async initiateAction(context: OtpContext) {}
+
+  async handlePhoneVerification(userWhasappsId: string, userMessage: string) {
+    await this.socket.sendMessage(userWhasappsId!, {
+      text:
+        'Numéro de téléphone reçu' +
+        '\nVérification du numéro de téléphone en cours...',
+    });
+
+    try {
+      const userFoundOtp = await this.users.generateOTP(userMessage);
+      await sendOTP(userMessage, `Votre code OTP est ${userFoundOtp.otp}`);
+      await this.socket.sendMessage(userWhasappsId!, {
+        text:
+          `Un code OTP a été envoyé au numéro de téléphone que vous avez fourni : ${userMessage}` +
+          '\nVeuillez le saisir ici comme ceci : O:Code OTP Reçu...',
+      });
+      await this.sessionService.set(userWhasappsId!, {
+        phone: userMessage,
+        waitingAction: AwaitAction.AWAIT_OTP,
+      });
+    } catch (error) {
+      console.log('###########', error.message);
+      if (error.message === 'User not found') {
+        const pinCode = randomInt(100000, 999999);
+        console.log(pinCode);
+        console.log('Numéro de téléphone :', userMessage);
+
+        await sendOTP(userMessage, `Votre code OTP est ${pinCode}`);
+        this.sessionService.set(userWhasappsId!, {
+          otp: pinCode.toString(),
+        });
+
+        await this.socket.sendMessage(userWhasappsId!, {
+          text:
+            `Un code OTP a été envoyé au numéro de téléphone que vous avez fourni : ${userMessage}` +
+            '\nVeuillez le saisir ici',
+        });
+        await this.sessionService.set(userWhasappsId!, {
+          phone: userMessage,
+          waitingAction: AwaitAction.AWAIT_OTP,
+        });
+      } else {
+        console.log(
+          'Erreur lors de la vérification du numéro de téléphone',
+          error.message,
+        );
+        await this.socket.sendMessage(userWhasappsId!, {
+          text: 'Erreur lors de la vérification du numéro de téléphone, veuillez réessayer plus tard...',
+        });
+      }
+    }
+  }
+
+  async handleOtpVerification(userWhasappsId: string, userMessage: string) {
+    const session = await this.sessionService.get(userWhasappsId!);
+
+    if (session.otp) {
+      const otpMatched = session.otp === userMessage.trim();
+
+      if (otpMatched) {
+        await this.socket.sendMessage(userWhasappsId, {
+          text:
+            `Vous n'avez pas encore de compte` +
+            '\n\nVotre statut actuel est : ' +
+            `Aucun compte 🔴` +
+            '\nComment puis-je vous aider ?' +
+            '\n' +
+            '\nVeuillez choisir une option pour commencer' +
+            '\n> *1. Enregistrement KYC -- 🔴*' +
+            '\n\n```SIXBot©copyright 2025```',
+        });
+        await this.sessionService.set(userWhasappsId, {
+          waitingAction: AwaitAction.AWAIT_KYC_REGISTRATION,
+        });
+        this.deleteTempUserById(userWhasappsId);
+      } else {
+        await this.socket.sendMessage(userWhasappsId, {
+          text:
+            `Le code OTP ne correspond pas, veuillez fournir un code correct.` +
+            "\nSi vous n'avez pas reçu le code OTP, veuillez redémarrer le processus pour le renvoyer, tapez /start",
+        });
+      }
+    } else {
+      await this.socket.sendMessage(userWhasappsId!, {
+        text: 'Aucun code OTP envoyé encore. Veuillez renvoyer votre le code OTP.',
+      });
+      return;
+    }
+  }
+
+  async handleKYCRegistration(userWhasappsId: string, userMessage: string) {
+    if (userMessage === '1') {
+      const userFound = await this.users.findByWhatsappId(userWhasappsId!);
+
+      if (userFound) {
+        await this.socket.sendMessage(userWhasappsId!!, {
+          text: this.getText(userFound.step + 1, userFound),
+        });
+        await this.setNextStep(userWhasappsId!, userFound.step + 1);
+        return;
+      } else {
+        await this.socket.sendMessage(userWhasappsId!, {
+          text: this.getText(0),
+        });
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_REG_PHONE,
+        });
+        return;
+      }
+    }
+  }
+
+  async otpGuardHandler(context: OtpContext) {
+    const session = await this.sessionService.get(context.userWhatsappId);
+
+    if (session.chachedWaitingAction) {
+      switch (session.chachedWaitingAction) {
+        case AwaitAction.AWAIT_LOAN_ACTION:
+          await this.handleLoanAction(context);
+
+          break;
+
+        default:
+          break;
+      }
+    }
+  }
+
+  async processWaitingAction(m: any, session: UserSessionData) {
+    const userWhatsAppId = m.key.remoteJid;
+    const messageType = Object.keys(m.message)[0];
+    var messageText = '';
+    var hasMessageText = false;
+    if (messageType !== 'imageMessage') {
+      messageText = m.message.conversation
+        ? m.message.conversation
+        : m.message.extendedTextMessage.text;
+      hasMessageText = m.message.conversation || m.message.extendedTextMessage;
+    }
+
+    switch (session.waitingAction) {
+      case AwaitAction.AWAIT_MAIN_MENU:
+        // Handle main menu input
+        if (hasMessageText) {
+          if (!this.isValidInput(AwaitAction.AWAIT_MAIN_MENU, messageText)) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Option invalide. Veuillez choisir une option valide (1, 2 ou 3).',
+            });
+            return;
+          }
+          this.handleMainMenuOptions(messageText, userWhatsAppId);
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+
+        break;
+
+      case AwaitAction.AWAIT_PHONE_VERIFICATION:
+        // Handle phone verification input
+        if (hasMessageText) {
+          if (
+            !this.isValidInput(
+              AwaitAction.AWAIT_PHONE_VERIFICATION,
+              messageText,
+            )
+          ) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Le numéro de téléphone non valide. Veuillez entrer un numéro valide (224XXXXXXXXX).',
+            });
+            return;
+          }
+          await this.handlePhoneVerification(userWhatsAppId!, messageText);
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+
+        break;
+      case AwaitAction.AWAIT_PHONE:
+        // Handle phone number input
+        break;
+
+      case AwaitAction.AWAIT_REG_PHONE:
+        // Handle registration phone input
+        if (hasMessageText) {
+          if (!this.isValidInput(AwaitAction.AWAIT_REG_PHONE, messageText)) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Numéro de téléphone invalide. Veuillez entrer un numéro valide au format (224XXXXXXXXX).',
+            });
+            return;
+          }
+          await this.updateFieldNew(
+            userWhatsAppId!,
+            'phone',
+            'Numéro de téléphone',
+            messageText,
+            0,
+          );
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+
+        break;
+
+      case AwaitAction.AWAIT_REF_PHONE:
+        // Handle referral phone input
+
+        if (hasMessageText) {
+          if (!this.isValidInput(AwaitAction.AWAIT_REF_PHONE, messageText)) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Numéro de téléphone de référence invalide. Veuillez entrer un numéro valide au format (224XXXXXXXXX).',
+            });
+            return;
+          }
+          await this.updateFieldNew(
+            userWhatsAppId!,
+            'refPhone',
+            'Numéro de téléphone de référence',
+            messageText,
+            1,
+          );
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+
+        break;
+
+      case AwaitAction.AWAIT_NAME:
+        // Handle name input
+        if (hasMessageText) {
+          if (!this.isValidInput(AwaitAction.AWAIT_NAME, messageText)) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Nom invalide. Veuillez entrer un nom valide.',
+            });
+            return;
+          }
+          await this.updateFieldNew(
+            userWhatsAppId!,
+            'name',
+            'Nom',
+            messageText,
+            3,
+          );
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+        break;
+
+      case AwaitAction.AWAIT_FIRSTNAME:
+        // Handle surname input
+        if (hasMessageText) {
+          if (!this.isValidInput(AwaitAction.AWAIT_FIRSTNAME, messageText)) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Prénom invalide. Veuillez entrer un prénom valide.',
+            });
+            return;
+          }
+          await this.updateFieldNew(
+            userWhatsAppId!,
+            'surname',
+            'Prénom',
+            messageText,
+            2,
+          );
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+        break;
+      case AwaitAction.AWAIT_FACE_IMAGE:
+        // Handle surname input
+        if (!(messageType === 'imageMessage')) {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez envoyer une image de votre visage pour continuer.',
+          });
+          return;
+        }
+        await this.processImageMessage(m);
+        break;
+      case AwaitAction.AWAIT_IDCARD_IMAGE:
+        // Handle surname input
+        if (!(messageType === 'imageMessage')) {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: "Veuillez envoyer une image de votre carte d'indentité pour continuer.",
+          });
+          return;
+        }
+        await this.processImageMessage(m);
+        break;
+      case AwaitAction.AWAIT_IDCARD_AND_FACE_IMAGE:
+        // Handle surname input
+        if (!(messageType === 'imageMessage')) {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: "Veuillez envoyer une image de votre visage avec la carte d'indentité pour continuer.",
+          });
+          return;
+        }
+        await this.processImageMessage(m);
+        break;
+      case AwaitAction.AWAIT_ADDRESS:
+        // Handle address input
+        if (hasMessageText) {
+          if (!this.isValidInput(AwaitAction.AWAIT_ADDRESS, messageText)) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Adresse invalide. Veuillez entrer une adresse valide.',
+            });
+            return;
+          }
+          await this.updateFieldNew(
+            userWhatsAppId!,
+            'address',
+            'Adresse',
+            messageText,
+            5,
+          );
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+
+        break;
+
+      case AwaitAction.AWAIT_ID_NUMBER:
+        // Handle ID number input
+        if (hasMessageText) {
+          if (!this.isValidInput(AwaitAction.AWAIT_ID_NUMBER, messageText)) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Numéro d’identification invalide. Veuillez entrer un numéro valide.',
+            });
+            return;
+          }
+          await this.updateFieldNew(
+            userWhatsAppId!,
+            'idNumber',
+            'Numéro d’identification',
+            messageText,
+            7,
+          );
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+        break;
+      case AwaitAction.AWAIT_BIRTHDATE:
+        // Handle birthdate input
+
+        if (hasMessageText) {
+          if (!this.isValidInput(AwaitAction.AWAIT_BIRTHDATE, messageText)) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Date de naissance invalide. Veuillez entrer une date valide au format jj/mm/aaaa.',
+            });
+            return;
+          }
+          await this.updateFieldNew(
+            userWhatsAppId!,
+            'birthday',
+            'Date de naissance',
+            messageText,
+            4,
+          );
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+
+        break;
+
+      case AwaitAction.AWAIT_OTP:
+        // Handle OTP input
+        if (hasMessageText) {
+          if (messageText.length !== 6) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Code OTP invalide. Veuillez entrer un code de 6 chiffres.',
+            });
+            return;
+          }
+          await this.handleOtpVerification(userWhatsAppId!, messageText);
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+
+        break;
+      case AwaitAction.AWAIT_OTP_GUARD:
+        // Handle OTP input
+        if (hasMessageText) {
+          if (messageText.length !== 6) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Code OTP invalide. Veuillez entrer un code de 6 chiffres.',
+            });
+            return;
+          }
+          await this.otpGuardHandler({
+            userWhatsappId: userWhatsAppId!,
+            userMessage: messageText,
+          });
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+
+        break;
+
+      case AwaitAction.AWAIT_ROLE:
+        // Handle role selection
+        if (hasMessageText) {
+          if (!this.isValidInput(AwaitAction.AWAIT_ROLE, messageText)) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Rôle invalide. Veuillez entrer un rôle valide (1 pour Client, 2 pour Agent).',
+            });
+            return;
+          }
+          await this.updateFieldNew(
+            userWhatsAppId!,
+            'role',
+            'Rôle',
+            messageText,
+            6,
+          );
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+        break;
+
+      case AwaitAction.AWAIT_LOAN_REQUEST:
+        // Handle loan details input
+        if (hasMessageText) {
+          if (!this.isValidInput(AwaitAction.AWAIT_LOAN_REQUEST, messageText)) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Option invalide. Veuillez choisir une option valide (1 pour Prêt sur appareil, 2 pour Prêt en argent).',
+            });
+            return;
+          }
+          await this.handleLoanRequest(userWhatsAppId!, messageText);
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+        break;
+
+      case AwaitAction.AWAIT_LOAN_TYPE:
+        // Handle loan type selection
+        if (hasMessageText) {
+          if (!this.isValidInput(AwaitAction.AWAIT_LOAN_TYPE, messageText)) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Option invalide. Veuillez choisir une option valide (1 pour Mensuel, 2 pour Hebdomadaire).',
+            });
+            return;
+          }
+          await this.handleLoanType(userWhatsAppId!, messageText);
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+        break;
+      case AwaitAction.AWAIT_LOAN_ACTION:
+        // Handle loan action selection
+        if (hasMessageText) {
+          if (!this.isValidInput(AwaitAction.AWAIT_LOAN_ACTION, messageText)) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Option invalide. Veuillez choisir une option valide (1 pour initier le paiement du prêt).',
+            });
+            return;
+          }
+          await this.initiateAction({
+            userWhatsappId: userWhatsAppId!,
+            userMessage: messageText,
+            awaitAction: AwaitAction.AWAIT_LOAN_ACTION,
+          });
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+        break;
+      case AwaitAction.AWAIT_KYC_REGISTRATION:
+        // Handle KYC registration input
+        if (hasMessageText) {
+          if (
+            !this.isValidInput(AwaitAction.AWAIT_KYC_REGISTRATION, messageText)
+          ) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Option invalide. Veuillez choisir l’option 1 pour commencer le processus d’inscription KYC.',
+            });
+            return;
+          }
+          await this.handleKYCRegistration(userWhatsAppId!, messageText);
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+        break;
+      case AwaitAction.AWAIT_RESTART:
+        // Handle restart input
+        if (hasMessageText) {
+          if (!this.isValidInput(AwaitAction.AWAIT_RESTART, messageText)) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Veuillez tapez /start pour commencer une session',
+            });
+            return;
+          } else {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Veuillez répondre par un message text.',
+            });
+            return;
+          }
+        }
+        break;
+      case AwaitAction.AWAIT_PAYMENT:
+        // Handle payment details input
+        break;
+
+      case AwaitAction.AWAIT_USER:
+        // Handle user info confirmation/input
+        break;
+
+      case AwaitAction.AWAIT_MOMO:
+        // Handle MoMo (Mobile Money) transaction/input
+        break;
+
+      default:
+        console.warn('Unhandled AwaitAction:');
+    }
+  }
+
+  isValidInput(action: AwaitAction, input: string): boolean {
+    const regex = AwaitActionRegexMap[action];
+    return regex.test(input);
+  }
   async onModuleDestroy() {
     this.socket?.close();
   }

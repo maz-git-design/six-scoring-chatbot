@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  mongo:
+    restart: always
+    image: mongo:6
+    container_name: mongo
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo-data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin@2025
+      MONGO_INITDB_DATABASE: chatbotSIXDB
+    networks:
+      - app-network
+
+  six-chatbot:
+    restart: always
+    build: .
+    container_name: six-chatbot
+    ports:
+      - '3002:3002'
+    depends_on:
+      - mongo
+    networks:
+      - app-network
+    environment:
+      - MONGO_URI=mongodb://admin:admin@2025@mongo:27017/chatbotSIXDB?authSource=admin
+      - REDIS_HOST=mvp-redis
+      - REDIS_PORT=6379
+      - MINIO_ENDPOINT=127.0.0.1
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=6iUJyCfwWunBlxXmHK5z
+      - MINIO_SECRET_KEY=OYYnXAO1QXBzFjUEwqHZWQcYcj3xG1iaTQhEgBTF
+
+networks:
+  app-network:
+    external: true # assumes redis and minio are running on this
+volumes:
+  mongo-data:

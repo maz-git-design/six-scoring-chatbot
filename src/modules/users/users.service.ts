@@ -47,9 +47,9 @@ export class UsersService {
   findByWhatsappId(id: string) {
     const userFound = this.userModel.findOne({ whasappsId: id }).exec();
 
-    if (!userFound) {
-      throw new NotFoundException('User not found');
-    }
+    // if (!userFound) {
+    //   throw new NotFoundException('User not found');
+    // }
     return userFound;
   }
 
