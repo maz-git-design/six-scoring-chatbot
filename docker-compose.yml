@@ -19,6 +19,7 @@ services:
   six-chatbot:
     restart: always
     build: .
+    image: six-chatbot:latest
     container_name: six-chatbot
     ports:
       - '3002:3002'

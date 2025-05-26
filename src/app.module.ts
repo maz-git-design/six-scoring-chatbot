@@ -23,6 +23,7 @@ import { FilesModule } from './modules/files/files.module';
     WhatsappAgentModule,
     ConfigModule.forRoot({
       isGlobal: true, // allows usage in all modules without re-import
+      ignoreEnvFile: true, // prevents loading.env file
       envFilePath: '.env',
     }),
     UsersModule,
