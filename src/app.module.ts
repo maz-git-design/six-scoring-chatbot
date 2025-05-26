@@ -32,7 +32,8 @@ import { FilesModule } from './modules/files/files.module';
     ScheduleModule.forRoot(),
     LoggerModule.forRoot(),
     MongooseModule.forRoot(
-      process.env.MONGO_URI || 'mongodb://localhost:27017/myappdb',
+      process.env.MONGO_URI ||
+        'mongodb://admin:admin@2025@mongo:27017/chatbotSIXDB?authSource=admin',
       mongooseModuleOptions,
     ),
     ReportsModule,

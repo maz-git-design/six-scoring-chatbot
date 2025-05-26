@@ -28,7 +28,7 @@ services:
     networks:
       - app-network
     environment:
-      - MONGO_URI=mongodb://admin:admin@2025@mongo:27017/chatbotSIXDB?authSource=admin
+      - MONGO_URI=mongodb://admin:admin%402025@mongo:27017/chatbotSIXDB?authSource=admin
       - REDIS_HOST=mvp-redis
       - REDIS_PORT=6379
       - MINIO_ENDPOINT=127.0.0.1
