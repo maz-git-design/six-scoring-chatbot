@@ -344,40 +344,66 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
 
       if (userFound.step === 7) {
         filename = `${userFound.idNumber}-card`;
-        await this.updateField(
-          userWhatsAppId,
-          'idCardPhotoUrl',
-          "Photo de la carte d'identité",
-          filename,
-          userFound.step + 1,
-        );
-        await this.setNextStep(userWhatsAppId, userFound.step + 1);
+        try {
+          const result = await this.filesService.uploadFileFromWhatsApp(
+            mockMulterFile,
+            filename,
+          );
+          await this.updateField(
+            userWhatsAppId,
+            'idCardPhotoUrl',
+            "Photo de la carte d'identité",
+            filename,
+            userFound.step + 1,
+          );
+          await this.setNextStep(userWhatsAppId, userFound.step + 1);
+        } catch (error) {
+          await this.socket.sendMessage(userWhatsAppId, {
+            text: 'Erreur rencontrée lors du traitement de votre image. Veuillez ressayez plutard ...',
+          });
+        }
       } else if (userFound.step === 8) {
         filename = `${userFound.idNumber}-facecard`;
-        await this.updateFieldNew(
-          userWhatsAppId,
-          'idCardFacePhotoUrl',
-          "Carte d'identité avec photo",
-          filename,
-          userFound.step + 1,
-        );
+        try {
+          const result = await this.filesService.uploadFileFromWhatsApp(
+            mockMulterFile,
+            filename,
+          );
+          await this.updateFieldNew(
+            userWhatsAppId,
+            'idCardFacePhotoUrl',
+            "Carte d'identité avec photo",
+            filename,
+            userFound.step + 1,
+          );
+        } catch (error) {
+          await this.socket.sendMessage(userWhatsAppId, {
+            text: 'Erreur rencontrée lors du traitement de votre image. Veuillez ressayez plutard ...',
+          });
+        }
       } else if (userFound.step === 9) {
         filename = `${userFound.idNumber}-facerecongition`;
-        await this.updateFieldNew(
-          userWhatsAppId,
-          'facerecognitionData',
-          'Image de reconnaissance faciale',
-          filename,
-          userFound.step + 1,
-        );
+        try {
+          const result = await this.filesService.uploadFileFromWhatsApp(
+            mockMulterFile,
+            filename,
+          );
+
+          await this.updateFieldNew(
+            userWhatsAppId,
+            'facerecognitionData',
+            'Image de reconnaissance faciale',
+            filename,
+            userFound.step + 1,
+          );
+        } catch (error) {
+          await this.socket.sendMessage(userWhatsAppId, {
+            text: 'Erreur rencontrée lors du traitement de votre image. Veuillez ressayez plutard ...',
+          });
+        }
       }
 
       //await writeFile(url, buffer);
-      const result = await this.filesService.uploadFileFromWhatsApp(
-        mockMulterFile,
-        filename,
-      );
-      console.log('uploadedFile', result);
     } else {
       await this.socket.sendMessage(userWhatsAppId, {
         text: "Vous n'êtes pas à l'étape appropriée pour envoyer une image. Veuillez suivre les instructions.",
