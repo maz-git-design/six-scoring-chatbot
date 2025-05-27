@@ -23,7 +23,6 @@ import sendTwiloSMS from 'src/services/sms/twilio';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ScoringsService } from '../scorings/scorings.service';
-import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { LoansService } from '../loans/loans.service';
 import { TransactionsService } from '../transactions/transactions.service';
