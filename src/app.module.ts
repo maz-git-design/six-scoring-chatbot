@@ -18,6 +18,7 @@ import { SessionModule } from './session/session.module';
 import { MinioModule } from './modules/minio/minio.module';
 import { ConfigModule } from '@nestjs/config';
 import { FilesModule } from './modules/files/files.module';
+import { DevicesModule } from './modules/devices/devices.module';
 @Module({
   imports: [
     WhatsappAgentModule,
@@ -43,6 +44,7 @@ import { FilesModule } from './modules/files/files.module';
     SessionModule,
     MinioModule,
     FilesModule,
+    DevicesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

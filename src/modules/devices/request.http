@@ -1,0 +1,11 @@
+POST http://localhost:3002/devices
+Content-Type: application/json
+
+{
+  "code": 1,
+  "name": "Afrrikia phone",
+  "description": "A good phone for Africa",
+  "model": "AFK-2024",
+  "activationFee": 780000,
+  "price": 380000
+}

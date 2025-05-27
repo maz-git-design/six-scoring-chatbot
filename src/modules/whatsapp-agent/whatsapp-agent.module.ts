@@ -12,6 +12,8 @@ import { SessionModule } from 'src/session/session.module';
 import { SessionService } from 'src/session/session.service';
 import { FilesModule } from '../files/files.module';
 import { FilesService } from '../files/files.service';
+import { DevicesModule } from '../devices/devices.module';
+import { DevicesService } from '../devices/devices.service';
 
 @Module({
   controllers: [WhatsappAgentController],
@@ -22,6 +24,7 @@ import { FilesService } from '../files/files.service';
     TransactionsModule,
     SessionModule,
     FilesModule,
+    DevicesModule,
   ],
   providers: [
     WhatsappAgentService,

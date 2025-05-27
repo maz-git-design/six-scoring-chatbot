@@ -49,6 +49,8 @@ import { SendOtp } from 'src/decorators/otp/send-otp.decorator';
 import { OtpVerification } from 'src/decorators/otp/otp-verification.decorator';
 import { OtpContext } from 'src/decorators/otp/otp.context';
 import { FilesService } from '../files/files.service';
+import { DevicesService } from '../devices/devices.service';
+import { DeviceDocument } from '../devices/entities/device.entity';
 
 const logger = require('pino')();
 
@@ -75,6 +77,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
   private readonly authFile = 'auth_info_baileys';
 
   private tempUsersJson: TempUser[] = [];
+  private device: DeviceDocument;
 
   constructor(
     private readonly users: UsersService,
@@ -84,172 +87,175 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     private readonly paymentService: PaymentService,
     private readonly sessionService: SessionService,
     private readonly filesService: FilesService,
+    private readonly devicesService: DevicesService,
   ) {}
 
-  isDifference(date1: string, date2: string, delay: number) {
-    const diffInMs = Math.abs(
-      new Date(date1).getTime() - new Date(date2).getTime(),
-    ); // Get absolute difference in milliseconds
-    const diffInMinutes = diffInMs / (1000 * 60); // Convert to minutes
-    return diffInMinutes >= delay; // Check if at least 10 minutes
-  }
+  // isDifference(date1: string, date2: string, delay: number) {
+  //   const diffInMs = Math.abs(
+  //     new Date(date1).getTime() - new Date(date2).getTime(),
+  //   ); // Get absolute difference in milliseconds
+  //   const diffInMinutes = diffInMs / (1000 * 60); // Convert to minutes
+  //   return diffInMinutes >= delay; // Check if at least 10 minutes
+  // }
 
-  @Cron(CronExpression.EVERY_30_SECONDS)
-  async handleCron() {
-    const dateNow = new Date();
+  // @Cron(CronExpression.EVERY_30_SECONDS)
+  // async handleCron() {
+  //   const dateNow = new Date();
 
-    // try {
-    //   const loans = await this.loans.findByStatus(LoanStatus.ONGOING);
+  //   // try {
+  //   //   const loans = await this.loans.findByStatus(LoanStatus.ONGOING);
 
-    //   loans.forEach((loan) => {
-    //     const nextDate = loan.nextDueDate;
-    //     const phoneNumber = loan.user['phone'];
-    //     console.log('Phone', loan.user['phone']);
+  //   //   loans.forEach((loan) => {
+  //   //     const nextDate = loan.nextDueDate;
+  //   //     const phoneNumber = loan.user['phone'];
+  //   //     console.log('Phone', loan.user['phone']);
 
-    //     // if (nextDate) {
-    //     //   if (
-    //     //     dateNow.getTime() >= nextDate.getTime() &&
-    //     //     loan.status === LoanStatus.ONGOING
-    //     //   ) {
-    //     //     //this.sendReminder(loan);
+  //   //     // if (nextDate) {
+  //   //     //   if (
+  //   //     //     dateNow.getTime() >= nextDate.getTime() &&
+  //   //     //     loan.status === LoanStatus.ONGOING
+  //   //     //   ) {
+  //   //     //     //this.sendReminder(loan);
 
-    //     //     sendOTP(
-    //     //       phoneNumber,
-    //     //       `This is a reminder to pay your next settlement of ${loan.activationFee} GNF`,
-    //     //     );
-    //     //   }
-    //     // }
-    //   });
+  //   //     //     sendOTP(
+  //   //     //       phoneNumber,
+  //   //     //       `This is a reminder to pay your next settlement of ${loan.activationFee} GNF`,
+  //   //     //     );
+  //   //     //   }
+  //   //     // }
+  //   //   });
 
-    //   //console.log('ICI');
-    // } catch (error) {}
-  }
+  //   //   //console.log('ICI');
+  //   // } catch (error) {}
+  // }
 
   async onModuleInit() {
-    this.connectToWhatsApp();
+    //this.connectToWhatsApp();
     //this.getTempUsers();
     // sendOTP('243892007346', 'Your OTP is 123456');
+    this.device = await this.devicesService.findByCode(1);
+    console.log('Device', this.device);
   }
 
-  getTempUsers() {
-    const dirPath = path.dirname(tempUsersFilePath);
-    if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true }); // Create temp directory
-    }
-    if (fs.existsSync(dirPath)) {
-      const rawData = fs.readFileSync(tempUsersFilePath, 'utf8');
-      console.log('Row data', rawData);
+  // getTempUsers() {
+  //   const dirPath = path.dirname(tempUsersFilePath);
+  //   if (!fs.existsSync(dirPath)) {
+  //     fs.mkdirSync(dirPath, { recursive: true }); // Create temp directory
+  //   }
+  //   if (fs.existsSync(dirPath)) {
+  //     const rawData = fs.readFileSync(tempUsersFilePath, 'utf8');
+  //     console.log('Row data', rawData);
 
-      if (rawData) {
-        this.tempUsersJson = JSON.parse(rawData);
-      }
-    }
-  }
+  //     if (rawData) {
+  //       this.tempUsersJson = JSON.parse(rawData);
+  //     }
+  //   }
+  // }
 
-  addTempUser(tempUser: TempUser, write: boolean = true) {
-    const exists = this.tempUsersJson.some(
-      (user) => user.whassappsId === tempUser.whassappsId,
-    );
+  // addTempUser(tempUser: TempUser, write: boolean = true) {
+  //   const exists = this.tempUsersJson.some(
+  //     (user) => user.whassappsId === tempUser.whassappsId,
+  //   );
 
-    if (exists) {
-      console.log(`⚠️ User with phone ${tempUser.whassappsId} already exists.`);
-      return;
-    }
+  //   if (exists) {
+  //     console.log(`⚠️ User with phone ${tempUser.whassappsId} already exists.`);
+  //     return;
+  //   }
 
-    // Add a new regex pattern
-    this.tempUsersJson.push(tempUser);
+  //   // Add a new regex pattern
+  //   this.tempUsersJson.push(tempUser);
 
-    // Convert back to JSON and write to file
-    if (write)
-      fs.writeFileSync(
-        tempUsersFilePath,
-        JSON.stringify(this.tempUsersJson, null, 2),
-        'utf8',
-      );
-  }
+  //   // Convert back to JSON and write to file
+  //   if (write)
+  //     fs.writeFileSync(
+  //       tempUsersFilePath,
+  //       JSON.stringify(this.tempUsersJson, null, 2),
+  //       'utf8',
+  //     );
+  // }
 
-  isTempUserExist(tempUser: TempUser) {
-    const exists = this.tempUsersJson.some(
-      (user) => user.whassappsId === tempUser.whassappsId,
-    );
+  // isTempUserExist(tempUser: TempUser) {
+  //   const exists = this.tempUsersJson.some(
+  //     (user) => user.whassappsId === tempUser.whassappsId,
+  //   );
 
-    return exists;
-  }
+  //   return exists;
+  // }
 
-  deleteTempUserById(whatsappId: string, write: boolean = true) {
-    if (!fs.existsSync(tempUsersFilePath)) {
-      console.log('⚠️ File does not exist.');
-      return;
-    }
+  // deleteTempUserById(whatsappId: string, write: boolean = true) {
+  //   if (!fs.existsSync(tempUsersFilePath)) {
+  //     console.log('⚠️ File does not exist.');
+  //     return;
+  //   }
 
-    // 2️⃣ Filter out the user by ID
-    const updatedUsers = this.tempUsersJson.filter(
-      (user) => user.whassappsId !== whatsappId,
-    );
+  //   // 2️⃣ Filter out the user by ID
+  //   const updatedUsers = this.tempUsersJson.filter(
+  //     (user) => user.whassappsId !== whatsappId,
+  //   );
 
-    // 3️⃣ Write back the updated JSON
-    if (write)
-      fs.writeFileSync(
-        tempUsersFilePath,
-        JSON.stringify(updatedUsers, null, 2),
-        'utf8',
-      );
+  //   // 3️⃣ Write back the updated JSON
+  //   if (write)
+  //     fs.writeFileSync(
+  //       tempUsersFilePath,
+  //       JSON.stringify(updatedUsers, null, 2),
+  //       'utf8',
+  //     );
 
-    console.log(`✅ User with ID ${whatsappId} deleted successfully.`);
-  }
+  //   console.log(`✅ User with ID ${whatsappId} deleted successfully.`);
+  // }
 
-  getTempUserById(whatsappId: string) {
-    // 2️⃣ Filter out the user by ID
-    const updatedUser = this.tempUsersJson.filter(
-      (user) => user.whassappsId == whatsappId,
-    );
+  // getTempUserById(whatsappId: string) {
+  //   // 2️⃣ Filter out the user by ID
+  //   const updatedUser = this.tempUsersJson.filter(
+  //     (user) => user.whassappsId == whatsappId,
+  //   );
 
-    return updatedUser.length > 0 ? updatedUser[0] : null;
-  }
+  //   return updatedUser.length > 0 ? updatedUser[0] : null;
+  // }
 
-  getTempUserByIdForPay(whatsappId: string) {
-    const tUser = this.getTempUserById(whatsappId);
+  // getTempUserByIdForPay(whatsappId: string) {
+  //   const tUser = this.getTempUserById(whatsappId);
 
-    if (!tUser) {
-      return null;
-    }
+  //   if (!tUser) {
+  //     return null;
+  //   }
 
-    // Check if phoneForPay is available
-    if (tUser.phoneForPay) {
-      return tUser;
-    } else {
-      return null;
-    }
-  }
+  //   // Check if phoneForPay is available
+  //   if (tUser.phoneForPay) {
+  //     return tUser;
+  //   } else {
+  //     return null;
+  //   }
+  // }
 
-  updateTempUser(tempUser: TempUser, write: boolean = true) {
-    // Ensure `this.tempUsersJson` is initialized
-    if (!this.tempUsersJson) {
-      this.tempUsersJson = [];
-    }
+  // updateTempUser(tempUser: TempUser, write: boolean = true) {
+  //   // Ensure `this.tempUsersJson` is initialized
+  //   if (!this.tempUsersJson) {
+  //     this.tempUsersJson = [];
+  //   }
 
-    // Find index of the existing user
-    const index = this.tempUsersJson.findIndex(
-      (user) => user.whassappsId === tempUser.whassappsId,
-    );
+  //   // Find index of the existing user
+  //   const index = this.tempUsersJson.findIndex(
+  //     (user) => user.whassappsId === tempUser.whassappsId,
+  //   );
 
-    if (index !== -1) {
-      // Update existing user
-      this.tempUsersJson[index] = { ...this.tempUsersJson[index], ...tempUser };
-      // Convert back to JSON and write to file
+  //   if (index !== -1) {
+  //     // Update existing user
+  //     this.tempUsersJson[index] = { ...this.tempUsersJson[index], ...tempUser };
+  //     // Convert back to JSON and write to file
 
-      console.log('hamamma', this.tempUsersJson[index]);
-      if (write)
-        fs.writeFileSync(
-          tempUsersFilePath,
-          JSON.stringify(this.tempUsersJson, null, 2),
-          'utf8',
-        );
-      console.log(`✅ User updated:`, this.tempUsersJson[index]);
-    } else {
-      console.log(`⚠️ User with whatsapp ${tempUser.whassappsId} not found.`);
-    }
-  }
+  //     console.log('hamamma', this.tempUsersJson[index]);
+  //     if (write)
+  //       fs.writeFileSync(
+  //         tempUsersFilePath,
+  //         JSON.stringify(this.tempUsersJson, null, 2),
+  //         'utf8',
+  //       );
+  //     console.log(`✅ User updated:`, this.tempUsersJson[index]);
+  //   } else {
+  //     console.log(`⚠️ User with whatsapp ${tempUser.whassappsId} not found.`);
+  //   }
+  // }
 
   async connectToWhatsApp() {
     // utility function to help save the auth state in a single folder
@@ -1062,8 +1068,8 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
           }
         } else {
           const createLoanDto: CreateLoanDto = {
-            totalAmount: 5000,
-            activationFee: 1000,
+            totalAmount: this.device.price,
+            activationFee: this.device.activationFee,
             name: 'Prêt pour appareil',
             description: 'Prêt pour appareil',
             loanType: LoanType.DEVICE,
@@ -1423,7 +1429,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
         await this.sessionService.set(userWhasappsId, {
           waitingAction: AwaitAction.AWAIT_KYC_REGISTRATION,
         });
-        this.deleteTempUserById(userWhasappsId);
+        //this.deleteTempUserById(userWhasappsId);
       } else {
         await this.socket.sendMessage(userWhasappsId, {
           text:
