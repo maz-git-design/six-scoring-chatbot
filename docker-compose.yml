@@ -9,12 +9,11 @@ services:
       - '27017:27017'
     volumes:
       - mongo-data:/data/db
-      - ./mongod.conf:/etc/mongod.conf # mount your config here
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: admin@2025
       MONGO_INITDB_DATABASE: chatbotSIXDB
-    command: ['mongod', '-f', '/etc/mongod.conf']
+    command: ['mongod', '--bind_ip_all']
     networks:
       - app-network
 
