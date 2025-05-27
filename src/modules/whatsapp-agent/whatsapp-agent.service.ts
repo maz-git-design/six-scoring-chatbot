@@ -319,11 +319,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
         const stream = await downloadMediaMessage(
           m,
           'stream',
-          {
-            options: {
-              timeout: 10000,
-            },
-          },
+          {},
           {
             logger,
             reuploadRequest: this.socket.updateMediaMessage,
