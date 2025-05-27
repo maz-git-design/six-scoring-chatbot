@@ -52,6 +52,8 @@ import { DevicesService } from '../devices/devices.service';
 import { DeviceDocument } from '../devices/entities/device.entity';
 import * as qrcode from 'qrcode-terminal';
 
+const https = require('https');
+
 const logger = require('pino')();
 
 const dirPath = path.join(
@@ -260,11 +262,15 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
   async connectToWhatsApp() {
     // utility function to help save the auth state in a single folder
     // this function serves as a good guide to help write auth & key states for SQL/no-SQL databases, which I would recommend in any production grade system
+
+    const agent = new https.Agent({ keepAlive: true, keepAliveMsecs: 15000 });
     const { state, saveCreds } = await useMultiFileAuthState(this.authFile);
     this.socket = makeWASocket({
       printQRInTerminal: true,
       auth: state,
       syncFullHistory: false,
+      agent: agent,
+      fetchAgent: agent,
     });
 
     this.socket.ev.on('connection.update', (update) => {
