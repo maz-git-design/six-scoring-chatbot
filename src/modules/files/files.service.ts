@@ -7,7 +7,7 @@ import { randomUUID } from 'crypto';
 
 @Injectable()
 export class FilesService {
-  protected _bucketName = 'main';
+  protected _bucketName = 'mvpfront';
 
   constructor(@InjectMinio() private readonly minioService: Minio.Client) {}
   create(createFileDto: CreateFileDto) {

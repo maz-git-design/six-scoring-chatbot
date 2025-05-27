@@ -38,8 +38,8 @@ services:
       - REDIS_PORT=6379
       - MINIO_ENDPOINT=minio
       - MINIO_PORT=9000
-      - MINIO_ACCESS_KEY=6iUJyCfwWunBlxXmHK5z
-      - MINIO_SECRET_KEY=OYYnXAO1QXBzFjUEwqHZWQcYcj3xG1iaTQhEgBTF
+      - MINIO_ACCESS_KEY=JfbschkBoXJAtg1vDHja
+      - MINIO_SECRET_KEY=U48GWMUaETY77y20OBcouksIm1Bi6OrX9udmJYnZ
 
 networks:
   app-network:
