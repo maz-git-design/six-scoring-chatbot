@@ -314,31 +314,43 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (userFound.step === 7 || userFound.step === 8 || userFound.step === 9) {
-      const buffer = await downloadMediaMessage(
-        m,
-        'buffer',
-        {},
-        {
-          logger: logger,
-          // pass this so that baileys can request a reupload of media
-          // that has been deleted
-          reuploadRequest: this.socket.updateMediaMessage,
-        },
-      );
+      let mockMulterFile: Express.Multer.File;
+      try {
+        const stream = await downloadMediaMessage(
+          m,
+          'stream',
+          {},
+          {
+            logger,
+            reuploadRequest: this.socket.updateMediaMessage,
+          },
+        );
+
+        const chunks = [];
+        for await (const chunk of stream) {
+          chunks.push(chunk);
+        }
+        const buffer = Buffer.concat(chunks);
+
+        mockMulterFile = {
+          fieldname: 'file',
+          originalname: 'media.jpg', // you can customize this if you know the actual name
+          encoding: '7bit',
+          mimetype: 'image/jpeg', // adjust based on content type
+          buffer: buffer,
+          size: buffer.length,
+          destination: '',
+          filename: '',
+          path: '',
+          stream: undefined, // not required for buffer-based handling
+        };
+      } catch (error) {
+        await this.socket.sendMessage(userWhatsAppId, {
+          text: 'Erreur rencontrée lors du téléchargement de votre image. Veuillez ressayez plutard ...',
+        });
+      }
 
       // Construct a pseudo Express.Multer.File object
-      const mockMulterFile: Express.Multer.File = {
-        fieldname: 'file',
-        originalname: 'media.jpg', // you can customize this if you know the actual name
-        encoding: '7bit',
-        mimetype: 'image/jpeg', // adjust based on content type
-        buffer: buffer,
-        size: buffer.length,
-        destination: '',
-        filename: '',
-        path: '',
-        stream: undefined, // not required for buffer-based handling
-      };
 
       var filename = '';
 
