@@ -24,7 +24,7 @@ import { DevicesModule } from './modules/devices/devices.module';
     WhatsappAgentModule,
     ConfigModule.forRoot({
       isGlobal: true, // allows usage in all modules without re-import
-      ignoreEnvFile: true, // prevents loading.env file
+      ignoreEnvFile: false, // prevents loading.env file
       envFilePath: '.env',
     }),
     UsersModule,
