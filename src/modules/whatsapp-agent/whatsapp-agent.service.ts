@@ -345,9 +345,11 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
           stream: undefined, // not required for buffer-based handling
         };
       } catch (error) {
+        console.log('Erreur de téléchargement ', error);
         await this.socket.sendMessage(userWhatsAppId, {
           text: 'Erreur rencontrée lors du téléchargement de votre image. Veuillez ressayez plutard ...',
         });
+        return;
       }
 
       // Construct a pseudo Express.Multer.File object
@@ -370,9 +372,11 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
           );
           await this.setNextStep(userWhatsAppId, userFound.step + 1);
         } catch (error) {
+          console.log("Erreur d'envoie minio ", error);
           await this.socket.sendMessage(userWhatsAppId, {
             text: 'Erreur rencontrée lors du traitement de votre image. Veuillez ressayez plutard ...',
           });
+          return;
         }
       } else if (userFound.step === 8) {
         filename = `${userFound.idNumber}-facecard`;
@@ -389,6 +393,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
             userFound.step + 1,
           );
         } catch (error) {
+          console.log("Erreur d'envoie minio ", error);
           await this.socket.sendMessage(userWhatsAppId, {
             text: 'Erreur rencontrée lors du traitement de votre image. Veuillez ressayez plutard ...',
           });
@@ -409,6 +414,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
             userFound.step + 1,
           );
         } catch (error) {
+          console.log("Erreur d'envoie minio ", error);
           await this.socket.sendMessage(userWhatsAppId, {
             text: 'Erreur rencontrée lors du traitement de votre image. Veuillez ressayez plutard ...',
           });
