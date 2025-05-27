@@ -50,6 +50,7 @@ import { OtpContext } from 'src/decorators/otp/otp.context';
 import { FilesService } from '../files/files.service';
 import { DevicesService } from '../devices/devices.service';
 import { DeviceDocument } from '../devices/entities/device.entity';
+import * as qrcode from 'qrcode-terminal';
 
 const logger = require('pino')();
 
@@ -268,6 +269,10 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
 
     this.socket.ev.on('connection.update', (update) => {
       const { connection, lastDisconnect } = update;
+      if (update.qr) {
+        qrcode.generate(update.qr, { small: true });
+        console.log('Scan the QR code above with WhatsApp');
+      }
       if (connection === 'close') {
         const shouldReconnect =
           (lastDisconnect.error as Boom)?.output?.statusCode !==
