@@ -27,6 +27,9 @@ services:
       - '3002:3002'
     depends_on:
       - mongo
+    dns:
+      - 100.125.1.250
+      - 100.125.1.14
     networks:
       - app-network
     environment:
