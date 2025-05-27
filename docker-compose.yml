@@ -33,7 +33,7 @@ services:
       - MONGO_URI=mongodb://admin:admin%402025@mongo:27017/chatbotSIXDB?authSource=admin
       - REDIS_HOST=mvp-redis
       - REDIS_PORT=6379
-      - MINIO_ENDPOINT=minio1
+      - MINIO_ENDPOINT=minio
       - MINIO_PORT=9000
       - MINIO_ACCESS_KEY=6iUJyCfwWunBlxXmHK5z
       - MINIO_SECRET_KEY=OYYnXAO1QXBzFjUEwqHZWQcYcj3xG1iaTQhEgBTF
