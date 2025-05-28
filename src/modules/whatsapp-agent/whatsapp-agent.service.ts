@@ -267,6 +267,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     const agent = new https.Agent({
       keepAlive: true,
       keepAliveMsecs: 15000,
+      family: 4,
     });
     const { state, saveCreds } = await useMultiFileAuthState(this.authFile);
     this.socket = makeWASocket({
