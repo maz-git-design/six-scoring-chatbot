@@ -267,7 +267,6 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     const agent = new https.Agent({
       keepAlive: true,
       keepAliveMsecs: 15000,
-      timeout: 10000,
       family: 4,
     });
     const { state, saveCreds } = await useMultiFileAuthState(this.authFile);
@@ -335,7 +334,11 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
         const stream = await downloadMediaMessage(
           m,
           'stream',
-          {},
+          {
+            options: {
+              timeout: 10000,
+            },
+          },
           {
             logger,
             reuploadRequest: this.socket.updateMediaMessage,
