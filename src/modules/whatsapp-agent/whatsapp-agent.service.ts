@@ -267,7 +267,6 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     const agent = new https.Agent({
       keepAlive: true,
       keepAliveMsecs: 15000,
-      family: 4,
     });
     const { state, saveCreds } = await useMultiFileAuthState(this.authFile);
     this.socket = makeWASocket({
@@ -329,6 +328,11 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (userFound.step === 7 || userFound.step === 8 || userFound.step === 9) {
+      const ipv4Agent = new https.Agent({
+        family: 4,
+        keepAlive: true,
+        keepAliveMsecs: 10000,
+      });
       let mockMulterFile: Express.Multer.File;
       try {
         const stream = await downloadMediaMessage(
@@ -337,6 +341,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
           {
             options: {
               timeout: 10000,
+              httpsAgent: ipv4Agent,
             },
           },
           {
