@@ -51,6 +51,7 @@ import { FilesService } from '../files/files.service';
 import { DevicesService } from '../devices/devices.service';
 import { DeviceDocument } from '../devices/entities/device.entity';
 import * as qrcode from 'qrcode-terminal';
+import { timeout } from 'rxjs';
 
 const https = require('https');
 
@@ -263,7 +264,12 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     // utility function to help save the auth state in a single folder
     // this function serves as a good guide to help write auth & key states for SQL/no-SQL databases, which I would recommend in any production grade system
 
-    const agent = new https.Agent({ keepAlive: true, keepAliveMsecs: 15000 });
+    const agent = new https.Agent({
+      keepAlive: true,
+      keepAliveMsecs: 15000,
+      timeout: 10000,
+      family: 4,
+    });
     const { state, saveCreds } = await useMultiFileAuthState(this.authFile);
     this.socket = makeWASocket({
       printQRInTerminal: true,
