@@ -1019,7 +1019,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
         const scoringResult =
           await this.scorings.findScoringByUserPhone(phoneNumber);
 
-        if (scoringResult.totalScore >= 50) {
+        if (scoringResult.totalScore >= 20) {
           await this.socket.sendMessage(userWhasappsId!, {
             text:
               `Félicitations, votre numéro ${phoneNumber} est éligible à un prêt.` +
