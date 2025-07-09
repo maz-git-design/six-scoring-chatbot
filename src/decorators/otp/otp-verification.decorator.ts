@@ -42,16 +42,16 @@ export function OtpVerification() {
         !session.otp
       ) {
         await socket.sendMessage(userWhatsappId, {
-          text: '❌ Vous ne pouvez pas encore vérifier le code OTP.',
+          text: 'Vous ne pouvez pas encore vérifier le code OTP.',
         });
         return;
       }
 
       if (otpCode === session.otp) {
-        await sessionService.clear(userWhatsappId);
+        //await sessionService.clear(userWhatsappId);
 
         await socket.sendMessage(userWhatsappId, {
-          text: '✅ Code OTP vérifié avec succès.',
+          text: 'Code OTP vérifié avec succès.',
         });
 
         args[index] = {
@@ -63,7 +63,7 @@ export function OtpVerification() {
       }
 
       await socket.sendMessage(userWhatsappId, {
-        text: '❌ Code OTP incorrect. Veuillez réessayer.',
+        text: 'Code OTP incorrect. Veuillez réessayer.',
       });
 
       return;

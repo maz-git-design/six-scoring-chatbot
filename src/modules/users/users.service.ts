@@ -38,14 +38,14 @@ export class UsersService {
   async findByPhone(phone: string): Promise<UserDocument> {
     const userFound = await this.userModel.findOne({ phone: phone });
 
-    if (!userFound) {
-      throw new NotFoundException('User not found');
-    }
+    // if (!userFound) {
+    //   throw new NotFoundException('User not found');
+    // }
     return userFound;
   }
 
-  findByWhatsappId(id: string) {
-    const userFound = this.userModel.findOne({ whasappsId: id }).exec();
+  findByWhatsappId(id: string): Promise<UserDocument> {
+    const userFound = this.userModel.findOne({ whasappsId: id });
 
     // if (!userFound) {
     //   throw new NotFoundException('User not found');

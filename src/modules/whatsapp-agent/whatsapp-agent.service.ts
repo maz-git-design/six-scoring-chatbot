@@ -12,6 +12,7 @@ import { CreateUserDto, Status } from '../users/dto/create-user.dto';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
 import {
   Role,
+  User,
   UserDocument,
   WaitingAction,
 } from '../users/entities/user.schema';
@@ -28,6 +29,7 @@ import { LoansService } from '../loans/loans.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { Types } from 'mongoose';
 import {
+  Loan,
   LoanStatus,
   LoanType,
   Settlement,
@@ -41,7 +43,7 @@ import { TransactionStatus } from '../transactions/schemas/transaction.schema';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { UpdateTransactionDto } from '../transactions/dto/update-transaction.dto';
 import { SessionService, UserSessionData } from 'src/session/session.service';
-import { AwaitAction } from 'src/session/session.enum';
+import { AwaitAction, UserRole } from 'src/session/session.enum';
 import { SessionData } from 'h3';
 import { AwaitActionRegexMap } from 'src/session/regex-map';
 import { SendOtp } from 'src/decorators/otp/send-otp.decorator';
@@ -49,9 +51,12 @@ import { OtpVerification } from 'src/decorators/otp/otp-verification.decorator';
 import { OtpContext } from 'src/decorators/otp/otp.context';
 import { FilesService } from '../files/files.service';
 import { DevicesService } from '../devices/devices.service';
-import { DeviceDocument } from '../devices/entities/device.entity';
+import { Device, DeviceDocument } from '../devices/entities/device.entity';
 import * as qrcode from 'qrcode-terminal';
 import { timeout } from 'rxjs';
+import { text } from 'stream/consumers';
+import { ClerkService } from 'src/services/payment/clerk.service';
+import { DeviceService } from 'src/services/payment/device.service';
 
 const https = require('https');
 
@@ -80,7 +85,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
   private readonly authFile = 'auth_info_baileys';
 
   private tempUsersJson: TempUser[] = [];
-  private device: DeviceDocument;
+  private device: Device;
 
   constructor(
     private readonly users: UsersService,
@@ -91,6 +96,8 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     private readonly sessionService: SessionService,
     private readonly filesService: FilesService,
     private readonly devicesService: DevicesService,
+    private readonly clerkService: ClerkService,
+    private readonly remoteDeviceService: DeviceService,
   ) {}
 
   // isDifference(date1: string, date2: string, delay: number) {
@@ -136,129 +143,13 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     this.connectToWhatsApp();
     //this.getTempUsers();
     // sendOTP('243892007346', 'Your OTP is 123456');
-    this.device = await this.devicesService.findByCode(1);
-    console.log('Device', this.device);
+    //this.device = await this.devicesService.findByCode(1);
+
+    //console.log('Device', this.device);
+    const remoteDevice = await this.remoteDeviceService.getDeviceType(1);
+    console.log('Remote device', this.device);
+    this.device = remoteDevice;
   }
-
-  // getTempUsers() {
-  //   const dirPath = path.dirname(tempUsersFilePath);
-  //   if (!fs.existsSync(dirPath)) {
-  //     fs.mkdirSync(dirPath, { recursive: true }); // Create temp directory
-  //   }
-  //   if (fs.existsSync(dirPath)) {
-  //     const rawData = fs.readFileSync(tempUsersFilePath, 'utf8');
-  //     console.log('Row data', rawData);
-
-  //     if (rawData) {
-  //       this.tempUsersJson = JSON.parse(rawData);
-  //     }
-  //   }
-  // }
-
-  // addTempUser(tempUser: TempUser, write: boolean = true) {
-  //   const exists = this.tempUsersJson.some(
-  //     (user) => user.whassappsId === tempUser.whassappsId,
-  //   );
-
-  //   if (exists) {
-  //     console.log(`⚠️ User with phone ${tempUser.whassappsId} already exists.`);
-  //     return;
-  //   }
-
-  //   // Add a new regex pattern
-  //   this.tempUsersJson.push(tempUser);
-
-  //   // Convert back to JSON and write to file
-  //   if (write)
-  //     fs.writeFileSync(
-  //       tempUsersFilePath,
-  //       JSON.stringify(this.tempUsersJson, null, 2),
-  //       'utf8',
-  //     );
-  // }
-
-  // isTempUserExist(tempUser: TempUser) {
-  //   const exists = this.tempUsersJson.some(
-  //     (user) => user.whassappsId === tempUser.whassappsId,
-  //   );
-
-  //   return exists;
-  // }
-
-  // deleteTempUserById(whatsappId: string, write: boolean = true) {
-  //   if (!fs.existsSync(tempUsersFilePath)) {
-  //     console.log('⚠️ File does not exist.');
-  //     return;
-  //   }
-
-  //   // 2️⃣ Filter out the user by ID
-  //   const updatedUsers = this.tempUsersJson.filter(
-  //     (user) => user.whassappsId !== whatsappId,
-  //   );
-
-  //   // 3️⃣ Write back the updated JSON
-  //   if (write)
-  //     fs.writeFileSync(
-  //       tempUsersFilePath,
-  //       JSON.stringify(updatedUsers, null, 2),
-  //       'utf8',
-  //     );
-
-  //   console.log(`✅ User with ID ${whatsappId} deleted successfully.`);
-  // }
-
-  // getTempUserById(whatsappId: string) {
-  //   // 2️⃣ Filter out the user by ID
-  //   const updatedUser = this.tempUsersJson.filter(
-  //     (user) => user.whassappsId == whatsappId,
-  //   );
-
-  //   return updatedUser.length > 0 ? updatedUser[0] : null;
-  // }
-
-  // getTempUserByIdForPay(whatsappId: string) {
-  //   const tUser = this.getTempUserById(whatsappId);
-
-  //   if (!tUser) {
-  //     return null;
-  //   }
-
-  //   // Check if phoneForPay is available
-  //   if (tUser.phoneForPay) {
-  //     return tUser;
-  //   } else {
-  //     return null;
-  //   }
-  // }
-
-  // updateTempUser(tempUser: TempUser, write: boolean = true) {
-  //   // Ensure `this.tempUsersJson` is initialized
-  //   if (!this.tempUsersJson) {
-  //     this.tempUsersJson = [];
-  //   }
-
-  //   // Find index of the existing user
-  //   const index = this.tempUsersJson.findIndex(
-  //     (user) => user.whassappsId === tempUser.whassappsId,
-  //   );
-
-  //   if (index !== -1) {
-  //     // Update existing user
-  //     this.tempUsersJson[index] = { ...this.tempUsersJson[index], ...tempUser };
-  //     // Convert back to JSON and write to file
-
-  //     console.log('hamamma', this.tempUsersJson[index]);
-  //     if (write)
-  //       fs.writeFileSync(
-  //         tempUsersFilePath,
-  //         JSON.stringify(this.tempUsersJson, null, 2),
-  //         'utf8',
-  //       );
-  //     console.log(`✅ User updated:`, this.tempUsersJson[index]);
-  //   } else {
-  //     console.log(`⚠️ User with whatsapp ${tempUser.whassappsId} not found.`);
-  //   }
-  // }
 
   async connectToWhatsApp() {
     // utility function to help save the auth state in a single folder
@@ -465,98 +356,31 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     if (messageType !== 'imageMessage') {
       messageText = m.message.conversation
         ? m.message.conversation
-        : m.message.extendedTextMessage.text;
+        : m.message.extendedTextMessage!.text;
       hasMessageText = m.message.conversation || m.message.extendedTextMessage;
     }
     // Retrieve current session data from Redis
     const session = await this.sessionService.get(userWhatsAppId);
+    console.log('session', session);
 
     // Handle /start command
     if (hasMessageText && messageText === '/start') {
       try {
-        const userFound = await this.users.findByWhatsappId(userWhatsAppId);
+        const phone = this.getPhoneFromWhatsappId(userWhatsAppId);
+        const clerkFound = await this.clerkService.getClerkInfo(phone);
 
-        if (userFound) {
-          if (userFound.step !== 10) {
-            await this.socket.sendMessage(m.key.remoteJid!, {
-              text:
-                `Bon retour ${userFound.name ?? 'cher utilisateur'}` +
-                '\nVotre statut actuel est: ' +
-                `${userFound.status} 🟠` +
-                '\nVotre rôle est: ' +
-                `${userFound.role}` +
-                '\nComment puis-je vous aider ?' +
-                '\n' +
-                '\nVeuillez choisir une option pour commencer' +
-                `\n> *1.Inscription KYC (continuer à l'étape ${userFound.step}) 🟠*` +
-                '\n> *2.Vérification de scoring 🟠*' +
-                '\n> *3.Demande de prêt 🟠*' +
-                '\n> *------------------*' +
-                '\n\n```SIXBot©copyright 2025```',
-            });
-          } else {
-            await this.socket.sendMessage(m.key.remoteJid!, {
-              text:
-                `Bon retour ${userFound.name ?? 'cher utilisateur'}` +
-                '\nVotre statut actuel est: ' +
-                `${userFound.status} 🟠` +
-                '\nVotre rôle est: ' +
-                `${userFound.role}` +
-                '\nComment puis-je vous aider ?' +
-                '\n' +
-                '\nVeuillez choisir une option pour commencer' +
-                `\n> *1.Inscription KYC 🟢*` +
-                '\n> *2.Vérification de scoring 🟢*' +
-                '\n> *3.Demande de prêt 🟢*' +
-                '\n> *------------------*' +
-                '\n\n```SIXBot©copyright 2025```',
-            });
-          }
-          await this.sessionService.set(userWhatsAppId, {
-            phone: userFound.phone,
-            waitingAction: AwaitAction.AWAIT_MAIN_MENU,
-          });
+        console.log('Clerk found:', clerkFound);
+        if (clerkFound) {
+          await this.handleClerkUser(userWhatsAppId, m, clerkFound);
+          return;
         } else {
-          await this.socket.sendMessage(userWhatsAppId!, {
-            text:
-              `Bienvenue sur le chatbot Affrikia ${m.pushName}` +
-              '\n' +
-              "\n Vous n'avez pas de compte avec ce numéro." +
-              "\n Nous procédons d'abord à la vérification de ce numéro avant de continuer" +
-              '\n*`Vérification du numéro de téléphone`*' +
-              '\n\nAvant de commencer, veuillez fournir votre numéro de téléphone au format (224XXXXXXXXX)' +
-              '\n\n```SIXBot©copyright 2025```',
-          });
-          await this.sessionService.set(userWhatsAppId, {
-            waitingAction: AwaitAction.AWAIT_PHONE_VERIFICATION,
-          });
+          console.log('No clerk found for phone:', phone);
+          await this.handleNormalUser(userWhatsAppId, m);
+          return;
         }
-
-        return;
       } catch (error) {
-        if (error.message === 'User not found') {
-          await this.socket.sendMessage(userWhatsAppId!, {
-            text:
-              `Bienvenue sur le chatbot Afrrikia ${m.pushName}` +
-              '\n' +
-              "\nVous n'avez pas de compte avec ce numéro." +
-              "Nous procédons d'abord à la vérification de ce numéro avant de continuer" +
-              '\n\n*`Vérification du numéro de téléphone`*' +
-              '\n\nAvant de commencer, veuillez fournir votre numéro de téléphone au format (224XXXXXXXXX)' +
-              '\n\n```SIXBot©copyright 2025```',
-          });
-          await this.sessionService.set(userWhatsAppId, {
-            waitingAction: AwaitAction.AWAIT_PHONE_VERIFICATION,
-          });
-        } else {
-          console.log(
-            'Erreur lors de la vérification du numéro de téléphone',
-            error.message,
-          );
-          await this.socket.sendMessage(userWhatsAppId!, {
-            text: 'Erreur lors de la vérification du numéro de téléphone, veuillez réessayer plus tard...',
-          });
-        }
+        console.log('Error fetching clerk info:', error);
+        await this.handleNormalUser(userWhatsAppId, m);
         return;
       }
     }
@@ -573,6 +397,304 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
           '\n\n```SIXBot©copyright 2025```',
       );
       // If no session exists, initialize it
+    }
+  }
+
+  async handleNormalUser(userWhatsAppId: string, m: any) {
+    try {
+      const userFound = await this.users.findByWhatsappId(userWhatsAppId);
+
+      if (userFound) {
+        if (userFound.step !== 10) {
+          await this.socket.sendMessage(m.key.remoteJid!, {
+            text:
+              `Bon retour ${userFound.name ?? 'cher utilisateur'}` +
+              '\nVotre statut actuel est: ' +
+              `${userFound.status} 🟠` +
+              '\nVotre rôle est: ' +
+              `${userFound.role}` +
+              '\nComment puis-je vous aider ?' +
+              '\n' +
+              '\nVeuillez choisir une option pour commencer' +
+              `\n> *1. Inscription KYC (continuer à l'étape ${userFound.step}) 🟠*` +
+              '\n> *2. Vérification de scoring 🟠*' +
+              '\n> *3. Demande de prêt 🟠*' +
+              '\n> *----------------------------*' +
+              '\n\n```SIXBot©copyright 2025```',
+          });
+        } else {
+          await this.socket.sendMessage(m.key.remoteJid!, {
+            text:
+              `Bon retour ${userFound.name ?? 'cher utilisateur'}` +
+              '\nVotre statut actuel est: ' +
+              `${userFound.status} 🟠` +
+              '\nVotre rôle est: ' +
+              `${userFound.role}` +
+              '\nComment puis-je vous aider ?' +
+              '\n' +
+              '\nVeuillez choisir une option pour commencer' +
+              `\n> *1. Inscription KYC 🟢*` +
+              '\n> *2. Vérification de scoring 🟢*' +
+              '\n> *3. Demande de prêt 🟢*' +
+              '\n> *----------------------------*' +
+              '\n\n```SIXBot©copyright 2025```',
+          });
+        }
+        await this.sessionService.set(userWhatsAppId, {
+          phone: userFound.phone,
+          waitingAction: AwaitAction.AWAIT_MAIN_MENU,
+        });
+      } else {
+        await this.socket.sendMessage(userWhatsAppId!, {
+          text:
+            `Bienvenue sur le chatbot Affrikia ${m.pushName}` +
+            '\n' +
+            "\n Vous n'avez pas de compte avec ce numéro." +
+            "\n Nous procédons d'abord à la vérification de ce numéro avant de continuer" +
+            '\n*`Vérification du numéro de téléphone`*' +
+            '\n\nAvant de commencer, veuillez fournir votre numéro de téléphone au format (224XXXXXXXXX)' +
+            '\n\n```SIXBot©copyright 2025```',
+        });
+        await this.sessionService.set(userWhatsAppId, {
+          waitingAction: AwaitAction.AWAIT_PHONE_VERIFICATION,
+        });
+      }
+
+      return;
+    } catch (error) {
+      if (error.message === 'User not found') {
+        await this.socket.sendMessage(userWhatsAppId!, {
+          text:
+            `Bienvenue sur le chatbot Afrrikia ${m.pushName}` +
+            '\n' +
+            "\nVous n'avez pas de compte avec ce numéro." +
+            "Nous procédons d'abord à la vérification de ce numéro avant de continuer" +
+            '\n\n*`Vérification du numéro de téléphone`*' +
+            '\n\nAvant de commencer, veuillez fournir votre numéro de téléphone au format (224XXXXXXXXX)' +
+            '\n\n```SIXBot©copyright 2025```',
+        });
+        await this.sessionService.set(userWhatsAppId, {
+          waitingAction: AwaitAction.AWAIT_PHONE_VERIFICATION,
+        });
+      } else {
+        console.log(
+          'Erreur lors de la vérification du numéro de téléphone',
+          error.message,
+        );
+        await this.socket.sendMessage(userWhatsAppId!, {
+          text: 'Erreur lors de la vérification du numéro de téléphone, veuillez réessayer plus tard...',
+        });
+      }
+      return;
+    }
+  }
+
+  async handleClerkUser(userWhatsAppId: string, m: any, clerk: ClerkModel) {
+    await this.socket.sendMessage(m.key.remoteJid!, {
+      text:
+        `Bon retour ${clerk.fullName}` +
+        '\nVotre statut actuel est: ' +
+        `Actif` +
+        '\nVotre rôle est: ' +
+        `Agent MTN de ${clerk.agentName}` +
+        '\nComment puis-je vous aider ?' +
+        '\n' +
+        '\nVeuillez choisir une option pour commencer:' +
+        `\n> *1. Vérification de score (client)*` +
+        `\n> *2. Inscription KYC (client)*` +
+        '\n> *3. Demande de prêt (client)*' +
+        '\n> *------------------------------*' +
+        '\n\n```SIXBot©copyright 2025```',
+    });
+
+    await this.sessionService.set(userWhatsAppId, {
+      clerkPhone: clerk.phone,
+      role: UserRole.CLERK,
+      waitingAction: AwaitAction.AWAIT_CLERK_MENU,
+    });
+  }
+
+  async handleClerkMenuOptions(userWhasappsId: string, userMessage: string) {
+    if (userMessage === '2') {
+      await this.socket.sendMessage(userWhasappsId, {
+        text: 'Veuillez entrez le numéro de téléphone du client à inscrire (format:224XXXXXXXX)',
+      });
+      await this.sessionService.set(userWhasappsId, {
+        waitingAction: AwaitAction.AWAIT_CLERK_INSCRIPTION_PHONE,
+      });
+    } else if (userMessage === '1') {
+      await this.socket.sendMessage(userWhasappsId, {
+        text: 'Veuillez entrez le numéro de téléphone du client à vérifier le score (format:224XXXXXXXX)',
+      });
+      await this.sessionService.set(userWhasappsId, {
+        waitingAction: AwaitAction.AWAIT_CLERK_SCORING_PHONE,
+      });
+    } else if (userMessage === '3') {
+      await this.socket.sendMessage(userWhasappsId, {
+        text: 'Veuillez entrez le numéro de téléphone du client à demander le prêt (format:224XXXXXXXX)',
+      });
+      await this.sessionService.set(userWhasappsId, {
+        waitingAction: AwaitAction.AWAIT_CLERK_LOAN_PHONE,
+      });
+    }
+  }
+
+  async handleClerkInscriptionOTP(userWhasappsId: string, userMessage: string) {
+    const session = await this.sessionService.get(userWhasappsId);
+
+    if (session.otp === userMessage) {
+      const userFound = await this.users.findByPhone(session.phone);
+
+      if (userFound) {
+        await this.socket.sendMessage(userWhasappsId!!, {
+          text: this.getText(userFound.step + 1, userFound),
+        });
+        await this.setNextStep(userWhasappsId!, userFound.step + 1);
+        return;
+      } else {
+        await this.socket.sendMessage(userWhasappsId!, {
+          text: this.getText(0),
+        });
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_REG_PHONE,
+        });
+        return;
+      }
+
+      // await this.sessionService.set(userWhasappsId!, {
+      //   waitingAction: AwaitAction.AWAIT_NO_REGISTER_USER_ACTION,
+      // });
+    } else {
+      await this.socket.sendMessage(userWhasappsId!, {
+        text: 'Le code OTP est incorrect. Veuillez réessayer.',
+      });
+    }
+  }
+
+  async handleClerkScoringOTP(userWhasappsId: string, userMessage: string) {
+    const session = await this.sessionService.get(userWhasappsId);
+
+    if (session.otp === userMessage) {
+      try {
+        const phone = session.phone;
+
+        const scoringResult = await this.scorings.findScoringByUserPhone(phone);
+
+        await this.socket.sendMessage(userWhasappsId!, {
+          text:
+            `Le score pour le numéro de téléphone ${phone} est: ` +
+            `\n\n*${scoringResult.totalScore.toFixed(2)}*` +
+            `\n\nN'hesitez pas d'utiliser un autre service (1, 2)`,
+        });
+        if (scoringResult.totalScore >= 20) {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: "Ce numéro est éligible pour demander un prêt de téléphone. Veuillez vous enregistrer ou rendez-vous à l'agence MTN la plus proche pour vous enregistrer et demander le prêt de téléphone.",
+          });
+        } else {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Ce numéro n’est pas éligible pour demander un prêt de téléphone.',
+          });
+        }
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_CLERK_MENU,
+        });
+      } catch (error) {
+        if (error.message === 'Scoring not found') {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Aucune donnée de score trouvée pour ce numéro de téléphone.',
+          });
+        } else if (error.message === 'Invalid phone format') {
+          await this.socket.sendMessage(userWhasappsId, {
+            text: "Le format du numéro Whatsapps n'est pas correct.",
+          });
+        } else {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Nous n’avons pas pu retrouver votre score. Veuillez réessayer plus tard...',
+          });
+        }
+      }
+
+      await this.sessionService.set(userWhasappsId!, {
+        waitingAction: AwaitAction.AWAIT_CLERK_MENU,
+      });
+    } else {
+      await this.socket.sendMessage(userWhasappsId!, {
+        text: 'Le code OTP est incorrect. Veuillez réessayer.',
+      });
+    }
+  }
+
+  async handleClerkLoangOTP(userWhasappsId: string, userMessage: string) {
+    const session = await this.sessionService.get(userWhasappsId);
+
+    if (session.otp === userMessage) {
+      try {
+        const userFound = await this.users.findByPhone(session.phone);
+
+        if (!userFound) {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 1 pour commencer le processus d’inscription KYC.',
+          });
+          await this.sessionService.set(userWhasappsId!, {
+            waitingAction: AwaitAction.AWAIT_CLERK_MENU,
+          });
+          return;
+        }
+
+        const phoneNumber = userFound.phone;
+
+        const scoringResult =
+          await this.scorings.findScoringByUserPhone(phoneNumber);
+
+        if (scoringResult.totalScore >= 20) {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text:
+              `Félicitations, votre numéro ${phoneNumber} est éligible à un prêt.` +
+              '\n\nVotre score est de : ' +
+              `\n> *${scoringResult.totalScore.toFixed(2)}*`,
+          });
+          await this.socket.sendMessage(userWhasappsId!, {
+            text:
+              `\n> *3.Demande de prêt -- 🟢*` +
+              '\n*Nos Services de prêt*' +
+              '\n\nVeuillez choisir un service :' +
+              `\n> *1 -- Prêt sur appareil*` +
+              `\n> *2 -- Prêt en argent*`,
+          });
+          await this.sessionService.set(userWhasappsId!, {
+            waitingAction: AwaitAction.AWAIT_LOAN_REQUEST,
+          });
+        } else {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text:
+              `Désolé, votre numéro ${phoneNumber} n’est pas éligible à un prêt.` +
+              '\n\nVotre score est de : ' +
+              `\n> *${scoringResult.totalScore.toFixed(2)}*` +
+              `\n\nVeuillez choisir un autre service : 1, 2 ou 3. Merci.`,
+          });
+          await this.sessionService.set(userWhasappsId!, {
+            waitingAction: AwaitAction.AWAIT_CLERK_MENU,
+          });
+        }
+      } catch (error) {
+        if (error.message === 'User not found') {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 1 pour commencer le processus d’inscription KYC.',
+          });
+        } else if (error.message === 'Scoring not found') {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Aucune donnée de score trouvée pour ce numéro de téléphone. Donc vous ne pouvez pas demander de prêt',
+          });
+        } else {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Nous n’avons pas pu retrouver votre score. Veuillez réessayer plus tard...',
+          });
+        }
+      }
+    } else {
+      await this.socket.sendMessage(userWhasappsId!, {
+        text: 'Le code OTP est incorrect. Veuillez réessayer.',
+      });
     }
   }
 
@@ -635,9 +757,15 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
           `\n> *1. Inscription KYC -- 🟠*` +
           '\n*`ÉTAPE 6`*' +
           '\n\nVeuillez choisir un rôle. Comment souhaitez-vous être enregistré :' +
-          `\n> *1 -- Client*` +
-          `\n> *2 -- Agent*`
+          `\n> *1 -- Client*`
         );
+      // return (
+      //   `\n> *1. Inscription KYC -- 🟠*` +
+      //   '\n*`ÉTAPE 6`*' +
+      //   '\n\nVeuillez choisir un rôle. Comment souhaitez-vous être enregistré :' +
+      //   `\n> *1 -- Client*` +
+      //   `\n> *2 -- Agent*`
+      // );
 
       case 7:
         return (
@@ -781,7 +909,17 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
         '\nTraitement... Préparez-vous pour l’étape suivante !',
     });
 
-    const userToUpdate = await this.users.findByWhatsappId(jid);
+    const session = await this.sessionService.get(jid);
+
+    var userToUpdate = null;
+
+    console.log('session', session);
+
+    if (session.role && session.role === UserRole.CLERK) {
+      userToUpdate = await this.users.findByPhone(session.phone);
+    } else {
+      userToUpdate = await this.users.findByWhatsappId(jid);
+    }
 
     if (userToUpdate) {
       if (userToUpdate.step === step - 1) {
@@ -815,12 +953,23 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
         });
       }
     } else if (!userToUpdate && step === 0) {
-      const userToCreate: CreateUserDto = {
-        phone: value.trim(),
-        step: 0,
-        whasappsId: jid,
-        status: Status.PENDING,
-      };
+      let userToCreate: CreateUserDto;
+
+      if (session.role && session.role === UserRole.CLERK) {
+        userToCreate = {
+          phone: value.trim(),
+          step: 0,
+          whasappsId: `${session.phone}@s.whatsapp.net`,
+          status: Status.PENDING,
+        };
+      } else {
+        userToCreate = {
+          phone: value.trim(),
+          step: 0,
+          whasappsId: jid,
+          status: Status.PENDING,
+        };
+      }
 
       const createdUser = await this.users.create(userToCreate);
 
@@ -860,6 +1009,16 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
 
   findOne(id: number) {
     return `This action returns a #${id} whatsappAgent`;
+  }
+
+  getPhoneFromWhatsappId(whatsappsId: string) {
+    const list = whatsappsId.split('@');
+    const check = this.isValidInput(AwaitAction.AWAIT_PHONE, list[0]);
+    if (check || list[0] === '243892007346') {
+      return list[0];
+    } else {
+      throw new Error('Invalid phone format');
+    }
   }
 
   update(id: number, updateWhatsappAgentDto: UpdateWhatsappAgentDto) {
@@ -942,7 +1101,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
       const userFound = await this.users.findByWhatsappId(userWhasappsId!);
 
       if (userFound) {
-        await this.socket.sendMessage(userWhasappsId!!, {
+        await this.socket.sendMessage(userWhasappsId!, {
           text: this.getText(userFound.step + 1, userFound),
         });
         await this.setNextStep(userWhasappsId!, userFound.step + 1);
@@ -956,9 +1115,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
         });
         return;
       }
-    }
-
-    if (userMessage === '2') {
+    } else if (userMessage === '2') {
       try {
         const userFound = await this.users.findByWhatsappId(userWhasappsId!);
 
@@ -995,14 +1152,12 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
             text: 'Aucune donnée de score trouvée pour ce numéro de téléphone.',
           });
         } else {
-          console.log('', error);
           await this.socket.sendMessage(userWhasappsId!, {
             text: 'Nous n’avons pas pu retrouver votre score. Veuillez réessayer plus tard...',
           });
         }
       }
-    }
-    if (userMessage === '3') {
+    } else if (userMessage === '3') {
       try {
         const userFound = await this.users.findByWhatsappId(userWhasappsId!);
 
@@ -1070,7 +1225,18 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
   async handleLoanRequest(userWhasappsId: string, userMessage: string) {
     if (userMessage.trim() === '1') {
       try {
-        const userFound = await this.users.findByWhatsappId(userWhasappsId!);
+        const session = await this.sessionService.get(userWhasappsId);
+        var userFound = null;
+
+        var nextReturnAction = AwaitAction.AWAIT_MAIN_MENU;
+
+        if (session.role && session.role === UserRole.CLERK) {
+          userFound = await this.users.findByPhone(session.phone!);
+          nextReturnAction = AwaitAction.AWAIT_CLERK_MENU;
+        } else {
+          userFound = await this.users.findByWhatsappId(userWhasappsId!);
+        }
+
         const userId = new Types.ObjectId(userFound._id as string);
         const loansFound = await this.loans.findByUser(userId);
 
@@ -1172,21 +1338,21 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
             text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 1 pour commencer le processus de KYC',
           });
           await this.sessionService.set(userWhasappsId!, {
-            waitingAction: AwaitAction.AWAIT_MAIN_MENU,
+            waitingAction: nextReturnAction,
           });
         } else if (error.message === 'Scoring not found') {
           await this.socket.sendMessage(userWhasappsId!, {
             text: 'Aucun score trouvé pour ce numéro de téléphone. Veuillez choisir un autre menu',
           });
           await this.sessionService.set(userWhasappsId!, {
-            waitingAction: AwaitAction.AWAIT_MAIN_MENU,
+            waitingAction: nextReturnAction,
           });
         } else {
           await this.socket.sendMessage(userWhasappsId!, {
             text: 'Impossible de récupérer votre score. Veuillez choisir un autre menu',
           });
           await this.sessionService.set(userWhasappsId!, {
-            waitingAction: AwaitAction.AWAIT_MAIN_MENU,
+            waitingAction: nextReturnAction,
           });
         }
       }
@@ -1200,7 +1366,17 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
   async handleLoanType(userWhasappsId: string, userMessage: string) {
     if (userMessage.trim() === '1' || userMessage.trim() === '2') {
       try {
-        const userFound = await this.users.findByWhatsappId(userWhasappsId!);
+        const session = await this.sessionService.get(userWhasappsId);
+        var userFound = null;
+
+        var nextReturnAction = AwaitAction.AWAIT_MAIN_MENU;
+
+        if (session.role && session.role === UserRole.CLERK) {
+          userFound = await this.users.findByPhone(session.phone!);
+          nextReturnAction = AwaitAction.AWAIT_CLERK_MENU;
+        } else {
+          userFound = await this.users.findByWhatsappId(userWhasappsId!);
+        }
 
         const userId = new Types.ObjectId(userFound._id as string);
         const loansFound = await this.loans.findByUser(userId);
@@ -1265,7 +1441,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
             text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 1 pour démarrer le processus d’enregistrement KYC.',
           });
           await this.sessionService.set(userWhasappsId!, {
-            waitingAction: AwaitAction.AWAIT_MAIN_MENU,
+            waitingAction: nextReturnAction,
           });
         } else {
           console.log('#########PRÊT', error.message);
@@ -1273,7 +1449,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
             text: 'Nous n’avons pas pu traiter votre demande de prêt. Veuillez réessayer plus tard...',
           });
           await this.sessionService.set(userWhasappsId!, {
-            waitingAction: AwaitAction.AWAIT_MAIN_MENU,
+            waitingAction: nextReturnAction,
           });
         }
       }
@@ -1287,9 +1463,25 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
         text: 'Veuillez patienter, le paiement des frais d’activation est en cours...',
       });
       try {
-        const userFound = await this.users.findByWhatsappId(
-          context.userWhatsappId!,
-        );
+        const session = await this.sessionService.get(context.userWhatsappId);
+        var userFound = null;
+        var nextReturnAction = AwaitAction.AWAIT_MAIN_MENU;
+
+        console.log('###context', context);
+
+        if (session.role && session.role === UserRole.CLERK) {
+          userFound = await this.users.findByPhone(session.phone);
+          nextReturnAction = AwaitAction.AWAIT_CLERK_MENU;
+        } else {
+          userFound = await this.users.findByWhatsappId(
+            context.userWhatsappId!,
+          );
+        }
+
+        console.log('userFound', userFound);
+        userFound.clerkId = session.clerkPhone;
+
+        console.log('userFound', userFound);
 
         const phoneNumber = userFound.phone;
         const userId = new Types.ObjectId(userFound._id as string);
@@ -1361,10 +1553,14 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
                   await this.socket.sendMessage(context.userWhatsappId!, {
                     text:
                       'Félicitations, votre paiement des frais d’activation a été effectué avec succès. ' +
-                      `\n\n> * Voici votre code d’activation : ${activationCode}`,
+                      `\n\n>Voici votre code d’activation : ${activationCode}`,
                   });
 
                   // Logique pour l'envoi par SMS également
+                  await sendOTP(
+                    phoneNumber,
+                    `Voici votre code d'activation ${activationCode}`,
+                  );
                 } else {
                   console.log('############', response.msg);
                   await this.socket.sendMessage(context.userWhatsappId!, {
@@ -1380,7 +1576,9 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
                   failedTransaction,
                 );
                 await this.socket.sendMessage(context.userWhatsappId!, {
-                  text: 'Échec du paiement. Veuillez réessayer ou contacter le support client.',
+                  text:
+                    'Échec du paiement. Veuillez réessayer ou contacter le support client.' +
+                    `\nRaison: ${transactionData.reason}`,
                 });
               }
             }
@@ -1390,6 +1588,17 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
                 `\n> *1. Demande de prêt -- 🟠*` +
                 `\nVous avez déjà initié une demande de prêt mais vous n'avez pas encore défini un plan de remboursement.` +
                 '\nVeuillez définir un plan de remboursement avant de continuer.',
+            });
+          } else if (loan.status === LoanStatus.ONGOING) {
+            await this.socket.sendMessage(context.userWhatsappId!, {
+              text:
+                `\n> *Paiement des frais d’activation*` +
+                `\nVous avez déjà commencé un prêt et vous avez déjà payé les frais d’activation. Veuillez contacter le support client pour obtenir plus d’information sur le remboursement de votre prêt.` +
+                '\nSi vous avez besoin d’aide pour rembourser votre prêt, veuillez contacter le support client.',
+            });
+
+            await this.sessionService.set(context.userWhatsappId, {
+              waitingAction: nextReturnAction,
             });
           }
         } else {
@@ -1406,18 +1615,105 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
             text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 1 pour commencer le processus KYC.',
           });
           await this.sessionService.set(context.userWhatsappId!, {
-            waitingAction: AwaitAction.AWAIT_MAIN_MENU,
+            waitingAction: nextReturnAction,
           });
         } else if (error.message === 'Scoring not found') {
           await this.socket.sendMessage(context.userWhatsappId!, {
             text: 'Aucune donnée de scoring trouvée pour ce numéro de téléphone.',
           });
         } else {
-          console.log('PAYMMMENT', error.message);
+          console.log('PAYMENT', error.message);
           await this.socket.sendMessage(context.userWhatsappId!, {
             text: "Nous n'avons pas pu initier le paiement. Veuillez réessayer plus tard...",
           });
         }
+      }
+    }
+  }
+
+  async handleLoanSelectClerkRequestPhone(
+    userWhasappsId: string,
+    userMessage: string,
+  ) {
+    await this.socket.sendMessage(userWhasappsId, {
+      text: "Veuillez entrez le numéro de téléphone de l'agent (format:224XXXXXXXX)",
+    });
+    await this.sessionService.set(userWhasappsId, {
+      waitingAction: AwaitAction.AWAIT_LOAN_CLERK_SELECTION_PHONE,
+      lastUserMessage: userMessage,
+    });
+  }
+
+  async handleLoanSelectClerkByPhoneVerification(
+    userWhasappsId: string,
+    userMessage: string,
+  ) {
+    try {
+      const phone = userMessage;
+      const clerkFound = await this.clerkService.getClerkInfo(phone);
+
+      if (clerkFound) {
+        await this.socket.sendMessage(userWhasappsId, {
+          text:
+            `Agent trouvé : ${clerkFound.fullName} de la Boutique(Agence) ${clerkFound.agentName}` +
+            `\nNuméro de téléphone : ${phone}` +
+            `\n\nVeuillez confirmer en répondant par le code OTP reçu par l'agent`,
+        });
+
+        const pinCode = randomInt(100000, 999999);
+        console.log('agent otp', pinCode);
+
+        // this.sessionService.set(userWhasappsId!, {
+        //   otp: pinCode.toString(),
+        //   clerkPhone: phone,
+        // });
+
+        await sendOTP(
+          userMessage,
+          `Le code OTP de liaison pour demande de prêt est ${pinCode}`,
+        );
+
+        await this.socket.sendMessage(`${phone}@s.whatsapp.net`, {
+          text: `Le code OTP de liaison pour demande de prêt est ${pinCode}`,
+        });
+
+        await this.sessionService.set(userWhasappsId, {
+          otp: pinCode.toString(),
+          clerkPhone: phone,
+          waitingAction: AwaitAction.AWAIT_LOAN_CLERK_SELECTION_CONFIRMATION,
+        });
+      } else {
+        await this.socket.sendMessage(userWhasappsId, {
+          text: 'Aucun agent trouvé avec ce numéro de téléphone. Veuillez réessayer.',
+        });
+      }
+    } catch (error) {
+      await this.socket.sendMessage(userWhasappsId, {
+        text: 'Aucun agent trouvé avec ce numéro de téléphone. Veuillez réessayer.',
+      });
+      return;
+    }
+  }
+
+  async handleLoanSelectClerkByPhoneConfirmation(
+    userWhasappsId: string,
+    userMessage: string,
+  ) {
+    const session = await this.sessionService.get(userWhasappsId!);
+
+    if (session.otp) {
+      const otpMatched = session.otp === userMessage.trim();
+
+      if (otpMatched) {
+        await this.initiateAction({
+          userWhatsappId: userWhasappsId!,
+          userMessage: session.lastUserMessage,
+          awaitAction: AwaitAction.AWAIT_LOAN_ACTION,
+        });
+      } else {
+        await this.socket.sendMessage(userWhasappsId, {
+          text: 'Code OTP agent invalide. Veuillez réessayer.',
+        });
       }
     }
   }
@@ -1438,7 +1734,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
       await this.socket.sendMessage(userWhasappsId!, {
         text:
           `Un code OTP a été envoyé au numéro de téléphone que vous avez fourni : ${userMessage}` +
-          '\nVeuillez le saisir ici comme ceci : O:Code OTP Reçu...',
+          '\nVeuillez le saisir ici comme ceci ...',
       });
       await this.sessionService.set(userWhasappsId!, {
         phone: userMessage,
@@ -1492,11 +1788,13 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
             '\nComment puis-je vous aider ?' +
             '\n' +
             '\nVeuillez choisir une option pour commencer' +
-            '\n> *1. Enregistrement KYC -- 🔴*' +
+            '\n> *1. Vérification de scoring*' +
+            '\n> *2. Enregistrement KYC*' +
+            '\n> *---------------------------*' +
             '\n\n```SIXBot©copyright 2025```',
         });
         await this.sessionService.set(userWhasappsId, {
-          waitingAction: AwaitAction.AWAIT_KYC_REGISTRATION,
+          waitingAction: AwaitAction.AWAIT_NO_REGISTER_USER_ACTION,
         });
         //this.deleteTempUserById(userWhasappsId);
       } else {
@@ -1533,6 +1831,173 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
         });
         return;
       }
+    }
+  }
+  async handleNoUserRegister(userWhasappsId: string, userMessage: string) {
+    if (userMessage === '2') {
+      const userFound = await this.users.findByWhatsappId(userWhasappsId!);
+
+      if (userFound) {
+        await this.socket.sendMessage(userWhasappsId!!, {
+          text: this.getText(userFound.step + 1, userFound),
+        });
+        await this.setNextStep(userWhasappsId!, userFound.step + 1);
+        return;
+      } else {
+        await this.socket.sendMessage(userWhasappsId!, {
+          text: this.getText(0),
+        });
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_REG_PHONE,
+        });
+        return;
+      }
+    } else if (userMessage === '1') {
+      await this.socket.sendMessage(userWhasappsId!, {
+        text:
+          `Vérifier le score pour: ` +
+          '\n> *1. Ce numéro Whasapps*' +
+          '\n> *2. Un autre numéro*',
+      });
+      await this.sessionService.set(userWhasappsId!, {
+        waitingAction: AwaitAction.AWAIT_NO_REGISTER_CHECK_SCORING_ACTION,
+      });
+    }
+  }
+
+  async handleNoUserCheckScoringAction(
+    userWhasappsId: string,
+    userMessage: string,
+  ) {
+    if (userMessage === '1') {
+      try {
+        const phone = this.getPhoneFromWhatsappId(userWhasappsId);
+
+        const scoringResult = await this.scorings.findScoringByUserPhone(phone);
+
+        await this.socket.sendMessage(userWhasappsId!, {
+          text:
+            `Le score pour votre numéro de téléphone ${phone} est: ` +
+            `\n\n*${scoringResult.totalScore.toFixed(2)}*` +
+            `\n\nN'hesitez pas d'utiliser un autre service (1, 2)`,
+        });
+        if (scoringResult.totalScore >= 20) {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: "Ce numéro est éligible pour demander un prêt de téléphone. Veuillez vous enregistrer ou rendez-vous à l'agence MTN la plus proche pour vous enregistrer et demander le prêt de téléphone.",
+          });
+        } else {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Ce numéro n’est pas éligible pour demander un prêt de téléphone.',
+          });
+        }
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_NO_REGISTER_USER_ACTION,
+        });
+      } catch (error) {
+        if (error.message === 'Scoring not found') {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Aucune donnée de score trouvée pour ce numéro de téléphone.',
+          });
+        } else if (error.message === 'Invalid phone format') {
+          await this.socket.sendMessage(userWhasappsId, {
+            text: "Le format du numéro Whatsapps n'est pas correct.",
+          });
+        } else {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Nous n’avons pas pu retrouver votre score. Veuillez réessayer plus tard...',
+          });
+        }
+      }
+    } else if (userMessage === '2') {
+      await this.socket.sendMessage(userWhasappsId!, {
+        text: 'Veuillez entrer le numéro de téléphone à vérifier le score au format (224XXXXXXXXX).',
+      });
+      await this.sessionService.set(userWhasappsId!, {
+        waitingAction: AwaitAction.AWAIT_NO_REGISTER_CHECK_SCORING_PHONE,
+      });
+    }
+  }
+
+  async handleGenericPhone(
+    userWhasappsId: string,
+    userMessage: string,
+    nextAction: AwaitAction,
+  ) {
+    const pinCode = randomInt(100000, 999999);
+    console.log(pinCode);
+    console.log('Numéro de téléphone :', userMessage);
+
+    await sendOTP(userMessage, `Votre code OTP est ${pinCode}`);
+    this.sessionService.set(userWhasappsId!, {
+      otp: pinCode.toString(),
+      phone: userMessage,
+    });
+
+    await this.socket.sendMessage(userWhasappsId!, {
+      text:
+        `Un code OTP a été envoyé au numéro de téléphone que vous avez fourni : ${userMessage}` +
+        '\nVeuillez le saisir ici',
+    });
+
+    console.log('########@nextstep', nextAction);
+    await this.sessionService.set(userWhasappsId!, {
+      waitingAction: nextAction,
+    });
+  }
+
+  async handleNoUserCheckScoringOTP(
+    userWhasappsId: string,
+    userMessage: string,
+  ) {
+    const session = await this.sessionService.get(userWhasappsId);
+
+    if (session.otp === userMessage) {
+      try {
+        const phone = session.phone;
+
+        const scoringResult = await this.scorings.findScoringByUserPhone(phone);
+
+        await this.socket.sendMessage(userWhasappsId!, {
+          text:
+            `Le score pour votre numéro de téléphone ${phone} est: ` +
+            `\n\n*${scoringResult.totalScore.toFixed(2)}*` +
+            `\n\nN'hesitez pas d'utiliser un autre service (1, 2)`,
+        });
+        if (scoringResult.totalScore >= 20) {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: "Ce numéro est éligible pour demander un prêt de téléphone. Veuillez vous enregistrer ou rendez-vous à l'agence MTN la plus proche pour vous enregistrer et demander le prêt de téléphone.",
+          });
+        } else {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Ce numéro n’est pas éligible pour demander un prêt de téléphone.',
+          });
+        }
+        await this.sessionService.set(userWhasappsId!, {
+          waitingAction: AwaitAction.AWAIT_NO_REGISTER_USER_ACTION,
+        });
+      } catch (error) {
+        if (error.message === 'Scoring not found') {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Aucune donnée de score trouvée pour ce numéro de téléphone.',
+          });
+        } else if (error.message === 'Invalid phone format') {
+          await this.socket.sendMessage(userWhasappsId, {
+            text: "Le format du numéro Whatsapps n'est pas correct.",
+          });
+        } else {
+          await this.socket.sendMessage(userWhasappsId!, {
+            text: 'Nous n’avons pas pu retrouver votre score. Veuillez réessayer plus tard...',
+          });
+        }
+      }
+
+      await this.sessionService.set(userWhasappsId!, {
+        waitingAction: AwaitAction.AWAIT_NO_REGISTER_USER_ACTION,
+      });
+    } else {
+      await this.socket.sendMessage(userWhasappsId!, {
+        text: 'Le code OTP est incorrect. Veuillez réessayer.',
+      });
     }
   }
 
@@ -1858,7 +2323,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
         if (hasMessageText) {
           if (!this.isValidInput(AwaitAction.AWAIT_ROLE, messageText)) {
             await this.socket.sendMessage(userWhatsAppId!, {
-              text: 'Rôle invalide. Veuillez entrer un rôle valide (1 pour Client, 2 pour Agent).',
+              text: 'Rôle invalide. Veuillez entrer un rôle valide (1 pour Client).',
             });
             return;
           }
@@ -1921,16 +2386,69 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
             });
             return;
           }
-          await this.initiateAction({
-            userWhatsappId: userWhatsAppId!,
-            userMessage: messageText,
-            awaitAction: AwaitAction.AWAIT_LOAN_ACTION,
-          });
+
+          const session = await this.sessionService.get(userWhatsAppId);
+          if (session.role && session.role === UserRole.CLERK) {
+            await this.initiateAction({
+              userWhatsappId: userWhatsAppId!,
+              userMessage: messageText,
+              awaitAction: AwaitAction.AWAIT_LOAN_ACTION,
+            });
+          } else {
+            this.handleLoanSelectClerkRequestPhone(userWhatsAppId, messageText);
+          }
         } else {
           await this.socket.sendMessage(userWhatsAppId!, {
             text: 'Veuillez répondre par un message text.',
           });
           return;
+        }
+        break;
+
+      case AwaitAction.AWAIT_LOAN_CLERK_SELECTION_PHONE:
+        // Handle loan clerk phone selection
+        if (hasMessageText) {
+          if (
+            !this.isValidInput(
+              AwaitAction.AWAIT_LOAN_CLERK_SELECTION_PHONE,
+              messageText,
+            )
+          ) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Numéro de téléphone invalide. Veuillez entrer un numéro de téléphone valide.',
+            });
+          }
+          await this.handleLoanSelectClerkByPhoneVerification(
+            userWhatsAppId!,
+            messageText,
+          );
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+        }
+        break;
+      case AwaitAction.AWAIT_LOAN_CLERK_SELECTION_CONFIRMATION:
+        // Handle loan clerk selection confirmation
+        if (hasMessageText) {
+          if (
+            !this.isValidInput(
+              AwaitAction.AWAIT_LOAN_CLERK_SELECTION_CONFIRMATION,
+              messageText,
+            )
+          ) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: `Code OTP invalide. Veuillez entrer un code valide.`,
+            });
+          }
+          await this.handleLoanSelectClerkByPhoneConfirmation(
+            userWhatsAppId!,
+            messageText,
+          );
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
         }
         break;
       case AwaitAction.AWAIT_KYC_REGISTRATION:
@@ -1945,6 +2463,100 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
             return;
           }
           await this.handleKYCRegistration(userWhatsAppId!, messageText);
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+        break;
+      case AwaitAction.AWAIT_NO_REGISTER_USER_ACTION:
+        // Handle KYC registration input
+        if (hasMessageText) {
+          if (
+            !this.isValidInput(
+              AwaitAction.AWAIT_NO_REGISTER_USER_ACTION,
+              messageText,
+            )
+          ) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Option invalide. Veuillez choisir l’option 1 ou 2 pour continuer.',
+            });
+            return;
+          }
+          await this.handleNoUserRegister(userWhatsAppId!, messageText);
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+        break;
+      case AwaitAction.AWAIT_NO_REGISTER_CHECK_SCORING_ACTION:
+        if (hasMessageText) {
+          if (
+            !this.isValidInput(
+              AwaitAction.AWAIT_NO_REGISTER_CHECK_SCORING_ACTION,
+              messageText,
+            )
+          ) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Option invalide. Veuillez choisir l’option 1 ou 2 pour continuer.',
+            });
+            return;
+          }
+          await this.handleNoUserCheckScoringAction(
+            userWhatsAppId!,
+            messageText,
+          );
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+        break;
+
+      case AwaitAction.AWAIT_NO_REGISTER_CHECK_SCORING_PHONE:
+        // Handle phone number input
+        if (hasMessageText) {
+          if (
+            !this.isValidInput(
+              AwaitAction.AWAIT_NO_REGISTER_CHECK_SCORING_PHONE,
+              messageText,
+            )
+          ) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Numéro de téléphone invalide. Veuillez entrer un numéro de téléphone valide.',
+            });
+            return;
+          }
+          await this.handleGenericPhone(
+            userWhatsAppId!,
+            messageText,
+            AwaitAction.AWAIT_NO_REGISTER_CHECK_SCORING_OTP,
+          );
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+        break;
+      case AwaitAction.AWAIT_NO_REGISTER_CHECK_SCORING_OTP:
+        if (hasMessageText) {
+          if (
+            !this.isValidInput(
+              AwaitAction.AWAIT_NO_REGISTER_CHECK_SCORING_OTP,
+              messageText,
+            )
+          ) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Otp invalide. Veuillez entrer un code OTP valide à 6 chiffre.',
+            });
+            return;
+          }
+          await this.handleNoUserCheckScoringOTP(userWhatsAppId!, messageText);
         } else {
           await this.socket.sendMessage(userWhatsAppId!, {
             text: 'Veuillez répondre par un message text.',
@@ -1979,7 +2591,164 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
       case AwaitAction.AWAIT_MOMO:
         // Handle MoMo (Mobile Money) transaction/input
         break;
+      case AwaitAction.AWAIT_CLERK_MENU:
+        // Handle Clerk menu input
+        if (hasMessageText) {
+          if (!this.isValidInput(AwaitAction.AWAIT_CLERK_MENU, messageText)) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Option invalide. Veuillez choisir une option valide (1, 2 ou 3).',
+            });
+            return;
+          }
+          this.handleClerkMenuOptions(userWhatsAppId, messageText);
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
 
+        break;
+      case AwaitAction.AWAIT_CLERK_INSCRIPTION_PHONE:
+        // Handle Clerk phone number input
+        if (hasMessageText) {
+          if (
+            !this.isValidInput(
+              AwaitAction.AWAIT_CLERK_INSCRIPTION_PHONE,
+              messageText,
+            )
+          ) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Numéro de téléphone invalide. Veuillez entrer un numéro de téléphone valide.',
+            });
+            return;
+          }
+          await this.handleGenericPhone(
+            userWhatsAppId!,
+            messageText,
+            AwaitAction.AWAIT_CLERK_INSCRIPTION_PHONE_OTP,
+          );
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+        break;
+      case AwaitAction.AWAIT_CLERK_INSCRIPTION_PHONE_OTP:
+        // Handle Clerk phone OTP input
+        if (hasMessageText) {
+          if (
+            !this.isValidInput(
+              AwaitAction.AWAIT_CLERK_INSCRIPTION_PHONE_OTP,
+              messageText,
+            )
+          ) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Otp invalide. Veuillez entrer un code OTP valide à 6 chiffre.',
+            });
+            return;
+          }
+          await this.handleClerkInscriptionOTP(userWhatsAppId!, messageText);
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+        break;
+      case AwaitAction.AWAIT_CLERK_SCORING_PHONE:
+        // Handle Clerk scoring phone input
+        if (hasMessageText) {
+          if (
+            !this.isValidInput(
+              AwaitAction.AWAIT_CLERK_SCORING_PHONE,
+              messageText,
+            )
+          ) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Numéro de téléphone invalide. Veuillez entrer un numéro de téléphone valide.',
+            });
+            return;
+          }
+          await this.handleGenericPhone(
+            userWhatsAppId!,
+            messageText,
+            AwaitAction.AWAIT_CLERK_SCORING_PHONE_OTP,
+          );
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+        break;
+      case AwaitAction.AWAIT_CLERK_SCORING_PHONE_OTP:
+        if (hasMessageText) {
+          if (
+            !this.isValidInput(
+              AwaitAction.AWAIT_CLERK_SCORING_PHONE_OTP,
+              messageText,
+            )
+          ) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Otp invalide. Veuillez entrer un code OTP valide à 6 chiffre.',
+            });
+            return;
+          }
+          await this.handleClerkScoringOTP(userWhatsAppId!, messageText);
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+        break;
+      case AwaitAction.AWAIT_CLERK_LOAN_PHONE:
+        // Handle Clerk phone number input
+        if (hasMessageText) {
+          if (
+            !this.isValidInput(AwaitAction.AWAIT_CLERK_LOAN_PHONE, messageText)
+          ) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Numéro de téléphone invalide. Veuillez entrer un numéro de téléphone valide.',
+            });
+            return;
+          }
+          await this.handleGenericPhone(
+            userWhatsAppId!,
+            messageText,
+            AwaitAction.AWAIT_CLERK_LOAN_PHONE_OTP,
+          );
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+        break;
+      case AwaitAction.AWAIT_CLERK_LOAN_PHONE_OTP:
+        // Handle Clerk phone OTP input
+        if (hasMessageText) {
+          if (
+            !this.isValidInput(
+              AwaitAction.AWAIT_CLERK_LOAN_PHONE_OTP,
+              messageText,
+            )
+          ) {
+            await this.socket.sendMessage(userWhatsAppId!, {
+              text: 'Otp invalide. Veuillez entrer un code OTP valide à 6 chiffre.',
+            });
+            return;
+          }
+          await this.handleClerkLoangOTP(userWhatsAppId!, messageText);
+        } else {
+          await this.socket.sendMessage(userWhatsAppId!, {
+            text: 'Veuillez répondre par un message text.',
+          });
+          return;
+        }
+        break;
       default:
         console.warn('Unhandled AwaitAction:');
     }

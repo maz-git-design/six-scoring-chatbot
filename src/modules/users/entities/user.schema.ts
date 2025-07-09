@@ -75,6 +75,9 @@ export class User {
   @Prop({ type: String }) // 'password' field, required
   password: string;
 
+  @Prop({ type: String }) // 'clerk phone' field, required
+  clerkId: string;
+
   @Prop({ type: Date }) // 'lastLoginDate' field, optional, can be null or undefined
   lastLoginDate: Date;
 

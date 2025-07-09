@@ -1,16 +1,17 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Injectable, Inject } from '@nestjs/common';
 import { Cache } from 'cache-manager';
-import { AwaitAction } from './session.enum';
+import { AwaitAction, UserRole } from './session.enum';
 
 export type UserSessionData = {
   phone?: string;
   otp?: string;
+  clerkPhone?: string;
   waitingAction?: AwaitAction;
   chachedWaitingAction?: AwaitAction;
   lastUserMessage?: string;
   step?: number;
-  role?: string;
+  role?: UserRole;
   name?: string;
 };
 

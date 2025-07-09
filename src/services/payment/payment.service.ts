@@ -27,7 +27,7 @@ export class PaymentService {
         partyId: phone,
       },
       payerMessage: 'Payment Request',
-      payeeNote: 'Payment for service',
+      payeeNote: 'Payment for afrrikia activation fee',
     };
 
     try {
@@ -40,6 +40,8 @@ export class PaymentService {
           Authorization: `Bearer ${token}`,
         },
       });
+
+      console.log('Data: ', response.data);
 
       this.logger.log(
         `Payment request initiated: ${JSON.stringify(response.data)}`,
@@ -94,8 +96,10 @@ export class PaymentService {
 
   async requestActivationCode(user: UserDocument): Promise<any> {
     const url = 'https://afrrikia.com/api/common/uploadKycInfo';
+    // const url = 'http://127.0.1:9999/api/common/uploadKycInfo';
 
     const postData = user;
+    console.log('User: ', user);
 
     try {
       const response = await axios.post(url, postData, {});

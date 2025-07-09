@@ -14,6 +14,8 @@ import { FilesModule } from '../files/files.module';
 import { FilesService } from '../files/files.service';
 import { DevicesModule } from '../devices/devices.module';
 import { DevicesService } from '../devices/devices.service';
+import { ClerkService } from 'src/services/payment/clerk.service';
+import { DeviceService } from 'src/services/payment/device.service';
 
 @Module({
   controllers: [WhatsappAgentController],
@@ -30,6 +32,8 @@ import { DevicesService } from '../devices/devices.service';
     WhatsappAgentService,
     PaymentService,
     AuthPaymentService,
+    DeviceService,
+    ClerkService,
     FilesService,
   ],
 })

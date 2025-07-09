@@ -50,6 +50,10 @@ export class CreateUserDto {
 
   @IsString()
   @IsOptional()
+  clerkId?: string;
+
+  @IsString()
+  @IsOptional()
   biometricMethod?: string;
 
   @IsString()

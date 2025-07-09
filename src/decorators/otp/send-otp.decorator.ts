@@ -44,9 +44,7 @@ export function SendOtp(ttlSeconds: number = 300) {
         );
 
         await socket.sendMessage(userWhatsappId, {
-          text:
-            `✅ Un code OTP a été envoyé au numéro : ${phone}` +
-            `\n(exp. 5 min)`,
+          text: `Un code OTP a été envoyé au numéro : ${phone}`,
         });
 
         return await originalMethod.apply(this, args);
@@ -74,7 +72,7 @@ export function SendOtp(ttlSeconds: number = 300) {
         }
 
         await socket.sendMessage(userWhatsappId, {
-          text: '❌ Erreur lors de l’envoi du code OTP. Veuillez réessayer.',
+          text: 'Erreur lors de l’envoi du code OTP. Veuillez réessayer.',
         });
       }
     };
