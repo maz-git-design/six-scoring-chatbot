@@ -13,8 +13,8 @@ export class DeviceService {
   private readonly logger = new Logger(DeviceService.name);
 
   async getDeviceType(id: number): Promise<Device> {
-    const url = 'https://afrrikia.com/api/device-type/';
-    //const url = 'http://127.0.0.1:9999/api/device-type/';
+    //const url = 'https://afrrikia.com/api/device-type/';
+    const url = 'http://127.0.0.1:9999/api/device-type/';
 
     try {
       console.log('phone: ', id);
