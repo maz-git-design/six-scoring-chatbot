@@ -10,7 +10,7 @@ export class ClerkService {
 
   async getClerkInfo(phone: string): Promise<ClerkModel> {
     //const url = 'https://afrrikia.com/api/common/getClerkInfo';
-    const url = 'http://127.0.0.1:9999/api/common/getClerkInfo';
+    const url = 'http://mvp-gateway:9999/api/common/getClerkInfo';
 
     try {
       console.log('phone: ', phone);
