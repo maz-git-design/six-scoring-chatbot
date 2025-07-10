@@ -416,8 +416,8 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
               '\nComment puis-je vous aider ?' +
               '\n' +
               '\nVeuillez choisir une option pour commencer' +
-              `\n> *1. Inscription KYC (continuer à l'étape ${userFound.step}) 🟠*` +
-              '\n> *2. Vérification de scoring 🟠*' +
+              '\n> *1. Vérification de scoring 🟠*' +
+              `\n> *2. Inscription KYC (continuer à l'étape ${userFound.step}) 🟠*` +
               '\n> *3. Demande de prêt 🟠*' +
               '\n> *----------------------------*' +
               '\n\n```SIXBot©copyright 2025```',
@@ -433,8 +433,8 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
               '\nComment puis-je vous aider ?' +
               '\n' +
               '\nVeuillez choisir une option pour commencer' +
-              `\n> *1. Inscription KYC 🟢*` +
-              '\n> *2. Vérification de scoring 🟢*' +
+              '\n> *1. Vérification de scoring 🟢*' +
+              `\n> *2. Inscription KYC 🟢*` +
               '\n> *3. Demande de prêt 🟢*' +
               '\n> *----------------------------*' +
               '\n\n```SIXBot©copyright 2025```',
@@ -633,7 +633,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
 
         if (!userFound) {
           await this.socket.sendMessage(userWhasappsId!, {
-            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 1 pour commencer le processus d’inscription KYC.',
+            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 2 pour commencer le processus d’inscription KYC.',
           });
           await this.sessionService.set(userWhasappsId!, {
             waitingAction: AwaitAction.AWAIT_CLERK_MENU,
@@ -679,7 +679,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
       } catch (error) {
         if (error.message === 'User not found') {
           await this.socket.sendMessage(userWhasappsId!, {
-            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 1 pour commencer le processus d’inscription KYC.',
+            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 2 pour commencer le processus d’inscription KYC.',
           });
         } else if (error.message === 'Scoring not found') {
           await this.socket.sendMessage(userWhasappsId!, {
@@ -712,49 +712,49 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     switch (step) {
       case 0:
         return (
-          `\n> *1. Inscription KYC -- 🔴*` +
+          `\n> *2. Inscription KYC -- 🔴*` +
           '\n*`ÉTAPE 0`*' +
           '\n\nVeuillez fournir votre numéro de téléphone (224XXXXXXXX)'
         );
 
       case 1:
         return (
-          `\n> *1. Inscription KYC -- 🟠*` +
+          `\n> *2. Inscription KYC -- 🟠*` +
           '\n*`ÉTAPE 1`*' +
           '\n\nVeuillez fournir le numéro de téléphone de votre référence (224XXXXXXXX)'
         );
 
       case 2:
         return (
-          `\n> *1. Inscription KYC -- 🟠*` +
+          `\n> *2. Inscription KYC -- 🟠*` +
           '\n*`ÉTAPE 2`*' +
           '\n\nVeuillez fournir votre prénom'
         );
 
       case 3:
         return (
-          `\n> *1. Inscription KYC -- 🟠*` +
+          `\n> *2. Inscription KYC -- 🟠*` +
           '\n*`ÉTAPE 3`*' +
           '\n\nVeuillez fournir votre nom de famille'
         );
 
       case 4:
         return (
-          `\n> *1. Inscription KYC -- 🟠*` +
+          `\n> *2. Inscription KYC -- 🟠*` +
           '\n*`ÉTAPE 4`*' +
           '\n\nVeuillez fournir votre date de naissance (jj/mm/aaaa)'
         );
 
       case 5:
         return (
-          `\n> *1. Inscription KYC -- 🟠*` +
+          `\n> *2. Inscription KYC -- 🟠*` +
           '\n*`ÉTAPE 5`*' +
           '\n\nVeuillez fournir votre adresse'
         );
 
       case 6:
         return (
-          `\n> *1. Inscription KYC -- 🟠*` +
+          `\n> *2. Inscription KYC -- 🟠*` +
           '\n*`ÉTAPE 6`*' +
           '\n\nVeuillez choisir un rôle. Comment souhaitez-vous être enregistré :' +
           `\n> *1 -- Client*`
@@ -769,34 +769,34 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
 
       case 7:
         return (
-          `\n> *1. Inscription KYC -- 🟠*` +
+          `\n> *2. Inscription KYC -- 🟠*` +
           '\n*`ÉTAPE 7`*' +
           '\n\nVeuillez fournir votre numéro de pièce d’identité'
         );
 
       case 8:
         return (
-          `\n> *1. Inscription KYC -- 🟠*` +
+          `\n> *2. Inscription KYC -- 🟠*` +
           '\n*`ÉTAPE 8`*' +
           '\n\nVeuillez envoyer une photo de votre carte d’identité'
         );
 
       case 9:
         return (
-          `\n> *1. Inscription KYC -- 🟠*` +
+          `\n> *2. Inscription KYC -- 🟠*` +
           '\n*`ÉTAPE 9`*' +
           '\n\nVeuillez envoyer une photo de votre carte d’identité avec votre visage'
         );
       case 10:
         return (
-          `\n> *1. Inscription KYC -- 🟠*` +
+          `\n> *2. Inscription KYC -- 🟠*` +
           '\n*`ÉTAPE 10`*' +
           '\n\nVeuillez envoyer une photo de votre visage pour la reconnaissance faciale'
         );
 
       case 11:
         return (
-          `\n> *1. Inscription KYC -- Terminée 🟢*` +
+          `\n> *2. Inscription KYC -- Terminée 🟢*` +
           '\n*`Résumé de votre inscription`*' +
           `\n\n> Numéro de téléphone : ${user?.phone}` +
           `\n> Prénom : ${user?.name}` +
@@ -1097,7 +1097,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
   }
 
   async handleMainMenuOptions(userMessage: string, userWhasappsId: string) {
-    if (userMessage === '1') {
+    if (userMessage === '2') {
       const userFound = await this.users.findByWhatsappId(userWhasappsId!);
 
       if (userFound) {
@@ -1115,13 +1115,13 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
         });
         return;
       }
-    } else if (userMessage === '2') {
+    } else if (userMessage === '1') {
       try {
         const userFound = await this.users.findByWhatsappId(userWhasappsId!);
 
         if (!userFound) {
           await this.socket.sendMessage(userWhasappsId!, {
-            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 1 pour commencer le processus d’inscription KYC.',
+            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 2 pour commencer le processus d’inscription KYC.',
           });
 
           return;
@@ -1145,7 +1145,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
       } catch (error) {
         if (error.message === 'User not found') {
           await this.socket.sendMessage(userWhasappsId!, {
-            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 1 pour commencer le processus d’inscription KYC.',
+            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 2 pour commencer le processus d’inscription KYC.',
           });
         } else if (error.message === 'Scoring not found') {
           await this.socket.sendMessage(userWhasappsId!, {
@@ -1163,7 +1163,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
 
         if (!userFound) {
           await this.socket.sendMessage(userWhasappsId!, {
-            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 1 pour commencer le processus d’inscription KYC.',
+            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 2 pour commencer le processus d’inscription KYC.',
           });
 
           return;
@@ -1207,7 +1207,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
       } catch (error) {
         if (error.message === 'User not found') {
           await this.socket.sendMessage(userWhasappsId!, {
-            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 1 pour commencer le processus d’inscription KYC.',
+            text: 'Vous devez d’abord vous enregistrer. Veuillez choisir l’option 2 pour commencer le processus d’inscription KYC.',
           });
         } else if (error.message === 'Scoring not found') {
           await this.socket.sendMessage(userWhasappsId!, {
@@ -2458,7 +2458,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
             !this.isValidInput(AwaitAction.AWAIT_KYC_REGISTRATION, messageText)
           ) {
             await this.socket.sendMessage(userWhatsAppId!, {
-              text: 'Option invalide. Veuillez choisir l’option 1 pour commencer le processus d’inscription KYC.',
+              text: 'Option invalide. Veuillez choisir l’option 2 pour commencer le processus d’inscription KYC.',
             });
             return;
           }
