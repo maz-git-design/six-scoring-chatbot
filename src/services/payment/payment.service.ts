@@ -96,7 +96,7 @@ export class PaymentService {
 
   async requestActivationCode(user: UserDocument): Promise<any> {
     //const url = 'https://afrrikia.com/api/common/uploadKycInfo';
-    const url = 'http://127.0.1:9999/api/common/uploadKycInfo';
+    const url = 'http://mvp-gateway:9999/api/common/uploadKycInfo';
 
     const postData = user;
     console.log('User: ', user);
