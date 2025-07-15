@@ -601,7 +601,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
       } catch (error) {
         if (error.message === 'Scoring not found') {
           await this.socket.sendMessage(userWhasappsId!, {
-            text: 'Aucune donnée de score trouvée pour ce numéro de téléphone.',
+            text: "Désolé vous n'êtes pas éligible.",
           });
         } else if (error.message === 'Invalid phone format') {
           await this.socket.sendMessage(userWhasappsId, {
@@ -1149,7 +1149,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
           });
         } else if (error.message === 'Scoring not found') {
           await this.socket.sendMessage(userWhasappsId!, {
-            text: 'Aucune donnée de score trouvée pour ce numéro de téléphone.',
+            text: "Désolé vous n'êtes pas éligible.",
           });
         } else {
           await this.socket.sendMessage(userWhasappsId!, {
@@ -1211,7 +1211,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
           });
         } else if (error.message === 'Scoring not found') {
           await this.socket.sendMessage(userWhasappsId!, {
-            text: 'Aucune donnée de score trouvée pour ce numéro de téléphone.',
+            text: "Désolé vous n'êtes pas éligible.",
           });
         } else {
           await this.socket.sendMessage(userWhasappsId!, {
@@ -1896,7 +1896,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
       } catch (error) {
         if (error.message === 'Scoring not found') {
           await this.socket.sendMessage(userWhasappsId!, {
-            text: 'Aucune donnée de score trouvée pour ce numéro de téléphone.',
+            text: "Désolé vous n'êtes pas éligible.",
           });
         } else if (error.message === 'Invalid phone format') {
           await this.socket.sendMessage(userWhasappsId, {
@@ -1978,7 +1978,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
       } catch (error) {
         if (error.message === 'Scoring not found') {
           await this.socket.sendMessage(userWhasappsId!, {
-            text: 'Aucune donnée de score trouvée pour ce numéro de téléphone.',
+            text: "Désolé vous n'êtes pas éligible.",
           });
         } else if (error.message === 'Invalid phone format') {
           await this.socket.sendMessage(userWhasappsId, {
