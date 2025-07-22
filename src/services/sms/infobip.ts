@@ -32,7 +32,7 @@ const sendOTP = async (to: string, message: string) => {
     messages: [
       {
         destinations: [{ to: to }],
-        from: 'ServiceSMS',
+        from: 'Afrrikia',
         text: message,
       },
     ],
