@@ -132,7 +132,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     this.connectToWhatsApp();
     //this.getTempUsers();
     sendOTP('224664222718', 'Your OTP is 123456 test');
-    sendOTP('243892007346', 'Your OTP is 123456 test');
+    //sendOTP('243892007346', 'Your OTP is 123456 test');
     //this.device = await this.devicesService.findByCode(1);
 
     //console.log('Device', this.device);
