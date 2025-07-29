@@ -80,37 +80,41 @@ export async function sendRawHttpRequest(urlStr: string): Promise<number> {
 //     });
 // };
 
-// const sendOTP = async (to: string, message: string) => {
-//   const logger = new Logger('Send OTP Service');
-//   const baseUrl = 'http://102.176.160.207:9001/smshttpquery/qs';
-//   const params = {
-//     REQUESTTYPE: 'SMSSubmitReq',
-//     USERNAME: 'SIXHTTP',
-//     PASSWORD: 'Six@2025',
-//     MOBILENO: to,
-//     ORIGIN_ADDR: 'Afrrikia',
-//     TYPE: '0',
-//     MESSAGE: message,
-//   };
-
-//   try {
-//     const response = await axios.get(baseUrl, { params });
-//     console.log('✅ Response:', response.data);
-//     logger.log(`SMS sent successfully to ${to}: ${response.data}`);
-//   } catch (error) {
-//     console.error('❌ Error sending SMS:', error.message);
-//     logger.error(`Failed to send SMS to ${to}: ${error.message}`);
-//   }
-// };
-
 const sendOTP = async (to: string, message: string) => {
   const logger = new Logger('Send OTP Service');
+  const baseUrl = 'http://102.176.160.207:9001/smshttpquery/qs';
+  const params = {
+    REQUESTTYPE: 'SMSSubmitReq',
+    USERNAME: 'SIXHTTP',
+    PASSWORD: 'Six@2025',
+    MOBILENO: to,
+    ORIGIN_ADDR: 'Afrrikia',
+    TYPE: '0',
+    MESSAGE: message,
+  };
 
-  const encodedMessage = encodeURIComponent(message);
-  const url = `http://102.176.160.207:9001/smshttpquery/qs?REQUESTTYPE=SMSSubmitReq&USERNAME=SIXHTTP&PASSWORD=Six@2025&MOBILENO=${to}&ORIGIN_ADDR=Afrrikia&TYPE=0&MESSAGE=${encodedMessage}`;
-
-  const statusCode = await sendRawHttpRequest(url);
-  return statusCode;
+  try {
+    const response = await axios.get(baseUrl, {
+      params,
+      validateStatus: () => true,
+      responseType: 'text',
+    });
+    console.log('✅ Response:', response.data);
+    logger.log(`SMS sent successfully to ${to}: ${response.data}`);
+  } catch (error) {
+    console.error('❌ Error sending SMS:', error.message);
+    logger.error(`Failed to send SMS to ${to}: ${error.message}`);
+  }
 };
+
+// const sendOTP = async (to: string, message: string) => {
+//   const logger = new Logger('Send OTP Service');
+
+//   const encodedMessage = encodeURIComponent(message);
+//   const url = `http://102.176.160.207:9001/smshttpquery/qs?REQUESTTYPE=SMSSubmitReq&USERNAME=SIXHTTP&PASSWORD=Six@2025&MOBILENO=${to}&ORIGIN_ADDR=Afrrikia&TYPE=0&MESSAGE=${encodedMessage}`;
+
+//   const statusCode = await sendRawHttpRequest(url);
+//   return statusCode;
+// };
 
 export default sendOTP;
