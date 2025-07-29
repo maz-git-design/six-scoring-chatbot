@@ -1,62 +1,52 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { CreateWhatsappAgentDto } from './dto/create-whatsapp-agent.dto';
-import { UpdateWhatsappAgentDto } from './dto/update-whatsapp-agent.dto';
 import { Boom } from '@hapi/boom';
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import makeWASocket, {
   DisconnectReason,
   downloadMediaMessage,
   useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
-import { UsersService } from '../users/users.service';
-import { CreateUserDto, Status } from '../users/dto/create-user.dto';
-import { UpdateUserDto } from '../users/dto/update-user.dto';
-import {
-  Role,
-  User,
-  UserDocument,
-  WaitingAction,
-} from '../users/entities/user.schema';
-import { writeFile } from 'fs/promises';
-import { Logger } from 'pino';
-import sendOTP from 'src/services/sms/infobip';
 import { randomInt } from 'crypto';
-import sendTwiloSMS from 'src/services/sms/twilio';
-import * as fs from 'fs';
-import * as path from 'path';
-import { ScoringsService } from '../scorings/scorings.service';
-import { v4 as uuidv4 } from 'uuid';
-import { LoansService } from '../loans/loans.service';
-import { TransactionsService } from '../transactions/transactions.service';
 import { Types } from 'mongoose';
+import * as path from 'path';
+import * as qrcode from 'qrcode-terminal';
+import { OtpVerification } from 'src/decorators/otp/otp-verification.decorator';
+import { OtpContext } from 'src/decorators/otp/otp.context';
+import { SendOtp } from 'src/decorators/otp/send-otp.decorator';
+import { ClerkService } from 'src/services/payment/clerk.service';
+import { DeviceService } from 'src/services/payment/device.service';
+import { PaymentService } from 'src/services/payment/payment.service';
+import sendOTP from 'src/services/sms/infobip';
+import { AwaitActionRegexMap } from 'src/session/regex-map';
+import { AwaitAction, UserRole } from 'src/session/session.enum';
+import { SessionService, UserSessionData } from 'src/session/session.service';
+import { v4 as uuidv4 } from 'uuid';
+import { DevicesService } from '../devices/devices.service';
+import { Device } from '../devices/entities/device.entity';
+import { FilesService } from '../files/files.service';
+import { CreateLoanDto } from '../loans/dto/create-loan.dto';
+import { UpdateLoanDto } from '../loans/dto/update-loan.dto';
+import { LoansService } from '../loans/loans.service';
 import {
-  Loan,
   LoanStatus,
   LoanType,
   Settlement,
   SettlementType,
 } from '../loans/schemas/loan.schema';
-import { CreateLoanDto } from '../loans/dto/create-loan.dto';
-import { UpdateLoanDto } from '../loans/dto/update-loan.dto';
-import { PaymentService } from 'src/services/payment/payment.service';
+import { ScoringsService } from '../scorings/scorings.service';
 import { CreateTransactionDto } from '../transactions/dto/create-transaction.dto';
-import { TransactionStatus } from '../transactions/schemas/transaction.schema';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { UpdateTransactionDto } from '../transactions/dto/update-transaction.dto';
-import { SessionService, UserSessionData } from 'src/session/session.service';
-import { AwaitAction, UserRole } from 'src/session/session.enum';
-import { SessionData } from 'h3';
-import { AwaitActionRegexMap } from 'src/session/regex-map';
-import { SendOtp } from 'src/decorators/otp/send-otp.decorator';
-import { OtpVerification } from 'src/decorators/otp/otp-verification.decorator';
-import { OtpContext } from 'src/decorators/otp/otp.context';
-import { FilesService } from '../files/files.service';
-import { DevicesService } from '../devices/devices.service';
-import { Device, DeviceDocument } from '../devices/entities/device.entity';
-import * as qrcode from 'qrcode-terminal';
-import { timeout } from 'rxjs';
-import { text } from 'stream/consumers';
-import { ClerkService } from 'src/services/payment/clerk.service';
-import { DeviceService } from 'src/services/payment/device.service';
+import { TransactionStatus } from '../transactions/schemas/transaction.schema';
+import { TransactionsService } from '../transactions/transactions.service';
+import { CreateUserDto, Status } from '../users/dto/create-user.dto';
+import { UpdateUserDto } from '../users/dto/update-user.dto';
+import {
+  Role,
+  UserDocument,
+  WaitingAction,
+} from '../users/entities/user.schema';
+import { UsersService } from '../users/users.service';
+import { CreateWhatsappAgentDto } from './dto/create-whatsapp-agent.dto';
+import { UpdateWhatsappAgentDto } from './dto/update-whatsapp-agent.dto';
 
 const https = require('https');
 
@@ -84,7 +74,6 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
   private socket;
   private readonly authFile = 'auth_info_baileys';
 
-  private tempUsersJson: TempUser[] = [];
   private device: Device;
 
   constructor(
@@ -142,7 +131,8 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     this.connectToWhatsApp();
     //this.getTempUsers();
-    //sendOTP('224664222718', 'Your OTP is 123456');
+    sendOTP('224664222718', 'Your OTP is 123456 test');
+    sendOTP('243892007346', 'Your OTP is 123456 test');
     //this.device = await this.devicesService.findByCode(1);
 
     //console.log('Device', this.device);
@@ -1722,7 +1712,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
   async initiateAction(context: OtpContext) {}
 
   async handlePhoneVerification(userWhasappsId: string, userMessage: string) {
-    await this.socket.sendMessage(userWhasappsId!, {
+    await this.socket.sendMessage(userWhasappsId, {
       text:
         'Numéro de téléphone reçu' +
         '\nVérification du numéro de téléphone en cours...',
@@ -1731,12 +1721,12 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     try {
       const userFoundOtp = await this.users.generateOTP(userMessage);
       await sendOTP(userMessage, `Votre code OTP est ${userFoundOtp.otp}`);
-      await this.socket.sendMessage(userWhasappsId!, {
+      await this.socket.sendMessage(userWhasappsId, {
         text:
           `Un code OTP a été envoyé au numéro de téléphone que vous avez fourni : ${userMessage}` +
           '\nVeuillez le saisir ici comme ceci ...',
       });
-      await this.sessionService.set(userWhasappsId!, {
+      await this.sessionService.set(userWhasappsId, {
         phone: userMessage,
         waitingAction: AwaitAction.AWAIT_OTP,
       });

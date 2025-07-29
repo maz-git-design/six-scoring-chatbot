@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import axios from 'axios';
 import constants from 'src/configs/constants';
 
@@ -26,28 +27,51 @@ var options = {
   maxRedirects: 20,
 };
 
-const sendOTP = async (to: string, message: string) => {
-  const url = 'sms/2/text/advanced';
-  var postData = JSON.stringify({
-    messages: [
-      {
-        destinations: [{ to: to }],
-        from: 'Afrrikia',
-        text: message,
-      },
-    ],
-  });
+// const sendOTP = async (to: string, message: string) => {
+//   const url = 'sms/2/text/advanced';
 
-  await service
-    .post(url, postData)
-    .then((res) => {
-      console.info(res.data);
-      if (res.data.status.toLowerCase() !== 'sent')
-        console.error({ message: res.data.description, service: 'infobip' });
-    })
-    .catch((e) => {
-      console.error({ message: e.message, service: 'infobip' });
-    });
+//     messages: [
+//       {
+//         destinations: [{ to: to }],
+//         from: 'Afrrikia',
+//         text: message,
+//       },
+//     ],
+//   });
+
+//   await service
+//     .post(url, postData)
+//     .then((res) => {
+//       console.info(res.data);
+//       if (res.data.status.toLowerCase() !== 'sent')
+//         console.error({ message: res.data.description, service: 'infobip' });
+//     })
+//     .catch((e) => {
+//       console.error({ message: e.message, service: 'infobip' });
+//     });
+// };
+
+const sendOTP = async (to: string, message: string) => {
+  const logger = new Logger('Send OTP Service');
+  const baseUrl = 'http://102.176.160.207:9001/smshttpquery/qs';
+  const params = {
+    REQUESTTYPE: 'SMSSubmitReq',
+    USERNAME: 'SIXHTTP',
+    PASSWORD: 'Six@2025',
+    MOBILENO: to,
+    ORIGIN_ADDR: 'Afrrikia',
+    TYPE: '0',
+    MESSAGE: message,
+  };
+
+  try {
+    const response = await axios.get(baseUrl, { params });
+    console.log('✅ Response:', response.data);
+    logger.log(`SMS sent successfully to ${to}: ${response.data}`);
+  } catch (error) {
+    console.error('❌ Error sending SMS:', error.message);
+    logger.error(`Failed to send SMS to ${to}: ${error.message}`);
+  }
 };
 
 export default sendOTP;
