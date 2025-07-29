@@ -1,8 +1,8 @@
 import { Logger } from '@nestjs/common';
 import axios from 'axios';
+import { exec } from 'child_process';
 import constants from 'src/configs/constants';
-import * as http from 'http';
-import * as querystring from 'querystring';
+import { promisify } from 'util';
 
 const service = axios.create({
   baseURL: 'https://pe4g98.api.infobip.com/',
@@ -53,49 +53,47 @@ var options = {
 //     });
 // };
 
+// const sendOTP = async (to: string, message: string) => {
+//   const logger = new Logger('Send OTP Service');
+//   const baseUrl = 'http://102.176.160.207:9001/smshttpquery/qs';
+//   const params = {
+//     REQUESTTYPE: 'SMSSubmitReq',
+//     USERNAME: 'SIXHTTP',
+//     PASSWORD: 'Six@2025',
+//     MOBILENO: to,
+//     ORIGIN_ADDR: 'Afrrikia',
+//     TYPE: '0',
+//     MESSAGE: message,
+//   };
+
+//   try {
+//     const response = await axios.get(baseUrl, { params });
+//     console.log('✅ Response:', response.data);
+//     logger.log(`SMS sent successfully to ${to}: ${response.data}`);
+//   } catch (error) {
+//     console.error('❌ Error sending SMS:', error.message);
+//     logger.error(`Failed to send SMS to ${to}: ${error.message}`);
+//   }
+// };
+
+const execPromise = promisify(exec);
+
 const sendOTP = async (to: string, message: string) => {
   const logger = new Logger('Send OTP Service');
 
-  const query = querystring.stringify({
-    REQUESTTYPE: 'SMSSubmitReq',
-    USERNAME: 'SIXHTTP',
-    PASSWORD: 'Six@2025',
-    MOBILENO: to,
-    ORIGIN_ADDR: 'Afrrikia',
-    TYPE: '0',
-    MESSAGE: message,
-  });
+  const url =
+    `http://102.176.160.207:9001/smshttpquery/qs` +
+    `?REQUESTTYPE=SMSSubmitReq&USERNAME=SIXHTTP&PASSWORD=Six@2025` +
+    `&MOBILENO=${to}&ORIGIN_ADDR=Afrrikia&TYPE=0&MESSAGE=${encodeURIComponent(message)}`;
 
-  const options = {
-    hostname: '102.176.160.207',
-    port: 9001,
-    path: `/smshttpquery/qs?${query}`,
-    method: 'GET',
-  };
-
-  return new Promise<void>((resolve, reject) => {
-    const req = http.request(options, (res) => {
-      let data = '';
-
-      res.on('data', (chunk) => {
-        data += chunk;
-      });
-
-      res.on('end', () => {
-        console.log('✅ Response:', data);
-        logger.log(`SMS sent successfully to ${to}: ${data}`);
-        resolve();
-      });
-    });
-
-    req.on('error', (error) => {
-      console.error('❌ Error sending SMS:', error.message);
-      logger.error(`Failed to send SMS to ${to}: ${error.message}`);
-      reject(error);
-    });
-
-    req.end();
-  });
+  try {
+    const { stdout } = await execPromise(`curl -s "${url}"`);
+    console.log('✅ Response:', stdout);
+    logger.log(`SMS sent successfully to ${to}: ${stdout}`);
+  } catch (error: any) {
+    console.error('❌ Error sending SMS:', error.message);
+    logger.error(`Failed to send SMS to ${to}: ${error.message}`);
+  }
 };
 
 export default sendOTP;
