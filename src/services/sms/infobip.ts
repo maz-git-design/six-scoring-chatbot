@@ -87,12 +87,12 @@ const sendOTP = async (to: string, message: string) => {
     `&MOBILENO=${to}&ORIGIN_ADDR=Afrrikia&TYPE=0&MESSAGE=${encodeURIComponent(message)}`;
 
   try {
-    const { stdout } = await execPromise(`curl -s "${url}"`);
-    console.log('✅ Response:', stdout);
-    logger.log(`SMS sent successfully to ${to}: ${stdout}`);
+    const { stdout } = await execPromise(
+      `curl -s -o /dev/null -w "%{http_code}" "${url}"`,
+    );
+    logger.log(`✅ SMS request sent to ${to}. HTTP status: ${stdout}`);
   } catch (error: any) {
-    console.error('❌ Error sending SMS:', error.message);
-    logger.error(`Failed to send SMS to ${to}: ${error.message}`);
+    logger.error(`❌ Failed to send SMS to ${to}: ${error.message}`);
   }
 };
 
