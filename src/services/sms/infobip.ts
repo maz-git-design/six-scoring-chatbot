@@ -53,24 +53,34 @@ var options = {
 const sendOTP = async (to: string, message: string) => {
   const logger = new Logger('Send OTP Service');
 
-  fetch(
-    `http://102.176.160.207:9001/smshttpquery/qs?REQUESTTYPE=SMSSubmitReq&USERNAME=SIXHTTP&PASSWORD=Six@2025&MOBILENO=${encodeURIComponent(to)}&ORIGIN_ADDR=Afrrikia&TYPE=0&MESSAGE=${encodeURIComponent(message)}`,
-  )
-    .then((response) => response.text())
-    .then((result) => console.log(result))
-    .catch((error) => {
-      console.error(`Error sending SMS to ${to}: ${error}`);
-      console.error(error);
-      if (error) {
-        logger.log(`Error sending SMS to ${to}: ${error}`);
-        console.log('type of error: ', typeof error);
-        // if (error.includes('SIXHTTP-SMSPush_smsPush:1')) {
-        //   logger.log(`SMS sent successfully to ${to}`);
-        // }
-        logger.error(`Failed to send SMS to ${to}: ${error}`);
+  try {
+    await fetch(
+      `http://102.176.160.207:9001/smshttpquery/qs?REQUESTTYPE=SMSSubmitReq&USERNAME=SIXHTTP&PASSWORD=Six@2025&MOBILENO=${encodeURIComponent(to)}&ORIGIN_ADDR=Afrrikia&TYPE=0&MESSAGE=${encodeURIComponent(message)}`,
+    );
+  } catch (error: any) {
+    if (error.cause) {
+      if (error.cause.name === 'HTTPParserError') {
+        logger.error(`Cause: ${error.cause.type} - ${error.cause.message}`);
+        logger.error(`Cause code: ${error.cause.code}`);
+        if (
+          error.cause.data &&
+          (error.cause.data.includes('SIXHTTP-SMSPush_smsPush:1') ||
+            error.cause.data.includes('+OK'))
+        ) {
+          logger.log(
+            `Even tough the HTTPParserError occurred, the SMS was sent successfully to ${to}`,
+          );
+        }
+      } else {
+        logger.error(`Cause: ${error.cause.name} - ${error.cause.message}`);
+        logger.error(`Cause code: ${error.cause.code}`);
+        logger.error(`It is possible that the SMS was not sent to ${to}`);
       }
-      //logger.error(`No precison got from the following error: ${error}`);
-    });
+    } else {
+      logger.error(`Error: ${error}`);
+      logger.error(`It is possible that the SMS was not sent to ${to}`);
+    }
+  }
 };
 
 export default sendOTP;
