@@ -59,6 +59,7 @@ const sendOTP = async (to: string, message: string) => {
     .then((response) => response.text())
     .then((result) => console.log(result))
     .catch((error) => {
+      console.error(`Error sending SMS to ${to}: ${error}`);
       if (error) {
         let errorMessage = error.toString();
         if (errorMessage.includes('SIXHTTP-SMSPush_smsPush:1')) {
@@ -66,7 +67,7 @@ const sendOTP = async (to: string, message: string) => {
         }
         logger.error(`Failed to send SMS to ${to}: ${error}`);
       }
-      logger.error(`No precison got from the following error: ${error}`);
+      //logger.error(`No precison got from the following error: ${error}`);
     });
 };
 
