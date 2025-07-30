@@ -59,9 +59,10 @@ const sendOTP = async (to: string, message: string) => {
     .then((response) => response.text())
     .then((result) => console.log(result))
     .catch((error) => {
-      console.error(`Error sending SMS to ${to}: ${error}`);
+      //console.error(`Error sending SMS to ${to}: ${error}`);
       if (error) {
         let errorMessage = error.toString();
+        logger.log(`Error sending SMS to ${to}: ${errorMessage}`);
         if (errorMessage.includes('SIXHTTP-SMSPush_smsPush:1')) {
           logger.log(`SMS sent successfully to ${to}`);
         }
