@@ -59,13 +59,14 @@ const sendOTP = async (to: string, message: string) => {
     .then((response) => response.text())
     .then((result) => console.log(result))
     .catch((error) => {
-      //console.error(`Error sending SMS to ${to}: ${error}`);
+      console.error(`Error sending SMS to ${to}: ${error}`);
+      console.error(error);
       if (error) {
-        let errorMessage = error.toString();
-        logger.log(`Error sending SMS to ${to}: ${errorMessage}`);
-        if (errorMessage.includes('SIXHTTP-SMSPush_smsPush:1')) {
-          logger.log(`SMS sent successfully to ${to}`);
-        }
+        logger.log(`Error sending SMS to ${to}: ${error}`);
+        console.log('type of error: ', typeof error);
+        // if (error.includes('SIXHTTP-SMSPush_smsPush:1')) {
+        //   logger.log(`SMS sent successfully to ${to}`);
+        // }
         logger.error(`Failed to send SMS to ${to}: ${error}`);
       }
       //logger.error(`No precison got from the following error: ${error}`);
