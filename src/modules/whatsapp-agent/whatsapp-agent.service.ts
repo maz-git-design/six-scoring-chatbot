@@ -131,13 +131,12 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     this.connectToWhatsApp();
 
-    sendOTP(
-      '224664222718',
-      'Ce message est un test pour voir si tout marche bien, l erreur est gérée très bien',
-    );
+    // sendOTP(
+    //   '224664222718',
+    //   'Ce message est un test pour voir si tout marche bien, l erreur est gérée très bien',
+    // );
 
     const remoteDevice = await this.remoteDeviceService.getDeviceType(1);
-    console.log('Remote device', remoteDevice);
     this.device = remoteDevice;
   }
 
