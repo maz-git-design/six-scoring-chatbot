@@ -82,30 +82,44 @@ export async function sendRawHttpRequest(urlStr: string): Promise<number> {
 
 const sendOTP = async (to: string, message: string) => {
   const logger = new Logger('Send OTP Service');
-  const baseUrl = 'http://102.176.160.207:9001/smshttpquery/qs';
-  const params = {
-    REQUESTTYPE: 'SMSSubmitReq',
-    USERNAME: 'SIXHTTP',
-    PASSWORD: 'Six@2025',
-    MOBILENO: to,
-    ORIGIN_ADDR: 'Afrrikia',
-    TYPE: '0',
-    MESSAGE: message,
+  const requestOptions = {
+    method: 'GET',
+    redirect: 'follow',
   };
 
-  try {
-    const response = await axios.get(baseUrl, {
-      params,
-      validateStatus: () => true,
-      responseType: 'text',
-    });
-    console.log('✅ Response:', response.data);
-    logger.log(`SMS sent successfully to ${to}: ${response.data}`);
-  } catch (error) {
-    console.error('❌ Error sending SMS:', error.message);
-    logger.error(`Failed to send SMS to ${to}: ${error.message}`);
-  }
+  fetch(
+    `http://102.176.160.207:9001/smshttpquery/qs?REQUESTTYPE=SMSSubmitReq&USERNAME=SIXHTTP&PASSWORD=Six@2025&MOBILENO=${encodeURIComponent(to)}&ORIGIN_ADDR=Afrrikia&TYPE=0&MESSAGE=${encodeURIComponent(message)}`,
+  )
+    .then((response) => response.text())
+    .then((result) => console.log(result))
+    .catch((error) => console.error(error));
 };
+// const sendOTP = async (to: string, message: string) => {
+//   const logger = new Logger('Send OTP Service');
+//   const baseUrl = 'http://102.176.160.207:9001/smshttpquery/qs';
+//   const params = {
+//     REQUESTTYPE: 'SMSSubmitReq',
+//     USERNAME: 'SIXHTTP',
+//     PASSWORD: 'Six@2025',
+//     MOBILENO: to,
+//     ORIGIN_ADDR: 'Afrrikia',
+//     TYPE: '0',
+//     MESSAGE: message,
+//   };
+
+//   try {
+//     const response = await axios.get(baseUrl, {
+//       params,
+//       validateStatus: () => true,
+//       responseType: 'text',
+//     });
+//     console.log('✅ Response:', response.data);
+//     logger.log(`SMS sent successfully to ${to}: ${response.data}`);
+//   } catch (error) {
+//     console.error('❌ Error sending SMS:', error.message);
+//     logger.error(`Failed to send SMS to ${to}: ${error.message}`);
+//   }
+// };
 
 // const sendOTP = async (to: string, message: string) => {
 //   const logger = new Logger('Send OTP Service');
