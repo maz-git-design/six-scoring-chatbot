@@ -59,11 +59,11 @@ const sendOTP = async (to: string, message: string) => {
     .then((response) => response.text())
     .then((result) => console.log(result))
     .catch((error) => {
-      if (error.message) {
-        if (error.message.includes('SIXHTTP-SMSPush_smsPush:1')) {
+      if (error) {
+        if (error.includes('SIXHTTP-SMSPush_smsPush:1')) {
           logger.log(`SMS sent successfully to ${to}`);
         }
-        logger.error(`Failed to send SMS to ${to}: ${error.message}`);
+        logger.error(`Failed to send SMS to ${to}: ${error}`);
       }
     });
 };
