@@ -3,6 +3,7 @@ import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import makeWASocket, {
   DisconnectReason,
   downloadMediaMessage,
+  fetchLatestBaileysVersion,
   useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
 import { randomInt } from 'crypto';
@@ -141,57 +142,78 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
   }
 
   async connectToWhatsApp() {
-    // utility function to help save the auth state in a single folder
-    // this function serves as a good guide to help write auth & key states for SQL/no-SQL databases, which I would recommend in any production grade system
+    try {
+      // utility function to help save the auth state in a single folder
+      // this function serves as a good guide to help write auth & key states for SQL/no-SQL databases, which I would recommend in any production grade system
 
-    const agent = new https.Agent({
-      keepAlive: true,
-      keepAliveMsecs: 15000,
-      family: 4,
-    });
-    const { state, saveCreds } = await useMultiFileAuthState(this.authFile);
-    this.socket = makeWASocket({
-      printQRInTerminal: true,
-      auth: state,
-      syncFullHistory: false,
-      agent: agent,
-      fetchAgent: agent,
-    });
+      // 1️⃣ Ensure you use the latest WhatsApp Web version
+      const { version, isLatest } = await fetchLatestBaileysVersion();
+      console.log(
+        `Using WhatsApp Web v${version.join('.')}, latest: ${isLatest}`,
+      );
 
-    this.socket.ev.on('connection.update', (update) => {
-      const { connection, lastDisconnect } = update;
-      if (update.qr) {
-        qrcode.generate(update.qr, { small: true });
-        console.log('Scan the QR code above with WhatsApp');
-      }
-      if (connection === 'close') {
-        const shouldReconnect =
-          (lastDisconnect.error as Boom)?.output?.statusCode !==
-          DisconnectReason.loggedOut;
-        console.log(
-          'connection closed due to ',
-          lastDisconnect.error,
-          ', reconnecting ',
-          shouldReconnect,
-        );
-        // reconnect if not logged out
-        if (shouldReconnect) {
-          this.connectToWhatsApp();
+      const { state, saveCreds } = await useMultiFileAuthState(this.authFile);
+
+      const agent = new https.Agent({
+        keepAlive: true,
+        keepAliveMsecs: 15000,
+        family: 4,
+      });
+
+      this.socket = makeWASocket({
+        version,
+        printQRInTerminal: true,
+        auth: state,
+        syncFullHistory: false,
+        markOnlineOnConnect: false,
+        agent,
+        fetchAgent: agent,
+      });
+
+      this.socket.ev.on('connection.update', async (update) => {
+        const { connection, lastDisconnect, qr } = update;
+        if (qr) {
+          qrcode.generate(qr, { small: true });
+          console.log('Scan the QR code above with WhatsApp');
         }
-      } else if (connection === 'open') {
-        console.log('opened connection');
-      }
-    });
-    this.socket.ev.on('creds.update', saveCreds);
-    this.socket.ev.on('messages.upsert', async ({ messages }) => {
-      const m = messages[0];
-      console.log('User message:', messages);
+        if (connection === 'close') {
+          const shouldReconnect =
+            (lastDisconnect.error as Boom)?.output?.statusCode !==
+            DisconnectReason.loggedOut;
+          console.error(
+            'connection closed due to ',
+            lastDisconnect.error,
+            ', reconnecting ',
+            shouldReconnect,
+          );
+          // reconnect if not logged out
+          if (shouldReconnect) {
+            setTimeout(() => this.connectToWhatsApp(), 5000);
+          } else {
+            console.warn(
+              'Logged out. Please delete auth folder and re-scan QR.',
+            );
+          }
+        } else if (connection === 'open') {
+          console.log('WhatsApp connected successfull');
+        }
+      });
+      this.socket.ev.on('creds.update', saveCreds);
+      this.socket.ev.on('messages.upsert', async ({ messages }) => {
+        const m = messages[0];
+        console.log('User message:', messages);
 
-      if (!m.message) return; // if there is no text or media message
-      if (m.key.fromMe) return;
+        if (!m?.message || m.key.fromMe) return;
+        console.log('Message received:', m);
+        await this.handleMessage(m);
 
-      this.handleMessage(m);
-    });
+        this.handleMessage(m);
+      });
+    } catch (error) {
+      console.error('💥 Error connecting to WhatsApp:', error);
+      console.log('Retrying connection in 10 seconds...');
+      setTimeout(() => this.connectToWhatsApp(), 10000);
+    }
   }
 
   async processImageMessage(m: any) {
