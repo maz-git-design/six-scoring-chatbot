@@ -207,7 +207,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
         console.log('Message received:', m);
         await this.handleMessage(m);
 
-        this.handleMessage(m);
+        //this.handleMessage(m);
       });
     } catch (error) {
       console.error('💥 Error connecting to WhatsApp:', error);
