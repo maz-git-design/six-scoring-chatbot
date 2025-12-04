@@ -362,7 +362,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     if (messageType !== 'imageMessage') {
       messageText = m.message.conversation
         ? m.message.conversation
-        : m.message.extendedTextMessage!.text;
+        : m.message.extendedTextMessage?.text;
       hasMessageText = m.message.conversation || m.message.extendedTextMessage;
     }
     // Retrieve current session data from Redis
@@ -2026,7 +2026,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
     if (messageType !== 'imageMessage') {
       messageText = m.message.conversation
         ? m.message.conversation
-        : m.message.extendedTextMessage.text;
+        : m.message.extendedTextMessage?.text;
       hasMessageText = m.message.conversation || m.message.extendedTextMessage;
     }
 
