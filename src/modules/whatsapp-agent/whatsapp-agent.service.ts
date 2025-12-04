@@ -242,10 +242,7 @@ export class WhatsappAgentService implements OnModuleInit, OnModuleDestroy {
           m,
           'stream',
           {
-            options: {
-              timeout: 10000,
-              httpsAgent: ipv4Agent,
-            },
+            options: {},
           },
           {
             logger,
